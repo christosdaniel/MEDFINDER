@@ -1,9 +1,19 @@
 import Constants from 'expo-constants';
 import { getItem, setItem } from './storage';
 
-// Set EXPO_PUBLIC_API_URL (see .env.example) to point the app at your API.
+// Where the API lives:
+// 1. EXPO_PUBLIC_API_URL if set (see .env.example), e.g. your production server.
+// 2. In development on a real phone (Expo Go), the computer running `expo start`:
+//    Expo tells us its LAN address (e.g. 192.168.1.20:8081), and the API runs on port 4000 there.
+// 3. Fallback from app.json (localhost, for the web build / simulators).
+function devServerApi(): string | null {
+  const hostUri = Constants.expoConfig?.hostUri; // "192.168.1.20:8081"
+  const host = hostUri?.split(':')[0];
+  if (!host || host === 'localhost' || host === '127.0.0.1' || host.endsWith('.exp.direct')) return null;
+  return `http://${host}:4000/api`;
+}
 export const API_URL: string =
-  process.env.EXPO_PUBLIC_API_URL || (Constants.expoConfig?.extra as any)?.apiUrl || 'http://localhost:4000/api';
+  process.env.EXPO_PUBLIC_API_URL || devServerApi() || (Constants.expoConfig?.extra as any)?.apiUrl || 'http://localhost:4000/api';
 
 const TOKEN_KEY = 'mf_patient_token';
 let token: string | null = null;

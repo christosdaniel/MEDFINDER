@@ -79,23 +79,29 @@ npm run dev:admin
 - Pharmacy web app: http://localhost:5173
 - Admin console: http://localhost:5174
 
-### Patient mobile app
+### Patient mobile app (on your iPhone or Android phone)
+
+1. Install **Expo Go** from the App Store / Play Store.
+2. Put the phone and your computer on the **same Wi-Fi**.
+3. Keep the API running (`npm run dev:api` above), then in a new terminal:
 
 ```bash
 cd mobile && npm install
 ```
 
 ```bash
-cp .env.example .env
-```
-
-Set `EXPO_PUBLIC_API_URL` in `mobile/.env` to your computer's LAN address (for example `http://192.168.1.20:4000/api`) so your phone can reach the API, then:
-
-```bash
 npx expo start
 ```
 
-Scan the QR code with **Expo Go** (Android) or the Camera app (iOS). Press `w` to open it in a browser.
+4. **iPhone:** open the Camera app and point it at the QR code in the terminal, then tap the banner to open in Expo Go. **Android:** scan the QR code from inside Expo Go.
+
+The app finds the API on your computer automatically (same address as the Expo server, port 4000). If the app says it can't reach MedFinder:
+- Check the phone and computer are on the same Wi-Fi (not a guest network that isolates devices).
+- On Windows, allow Node.js through the firewall on private networks (ports 4000 and 8081).
+- On iPhone, allow Expo Go's "Local Network" permission (Settings → Expo Go).
+- Or set `EXPO_PUBLIC_API_URL` in `mobile/.env` (see `.env.example`).
+
+Press `w` in the Expo terminal to open the app in a browser instead.
 
 ### Demo accounts (created by `npm run seed`)
 
