@@ -1,0 +1,9 @@
+{
+  "name": "medfinder-stock-sync",
+  "version": "1.0.0",
+  "description": "Keeps a pharmacy's local Excel / CSV / Access stock file in sync with MedFinder",
+  "type": "module",
+  "bin": { "medfinder-stock-sync": "sync.js" },
+  "engines": { "node": ">=18" },
+  "scripts": { "start": "node sync.js" }
+}

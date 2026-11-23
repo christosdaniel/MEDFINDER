@@ -94,13 +94,13 @@ r.get('/home', (req, res) => {
   // Medicine + price cards from nearby pharmacies first, then others.
   const offers = db.prepare(`
     SELECT i.id AS inventoryId, i.price, i.quantity, i.low_stock_threshold AS threshold,
-           m.id AS medicineId, m.name, m.strength, m.form, p.*
+           p.*, m.id AS medicineId, m.name AS med_name, m.strength AS med_strength, m.form AS med_form
     FROM inventory i JOIN medicines m ON m.id = i.medicine_id
     JOIN pharmacies p ON p.id = i.pharmacy_id AND ${VISIBLE}
     WHERE i.quantity > 0 ORDER BY i.updated_at DESC LIMIT 200
   `).all().map((o) => ({
     inventoryId: o.inventoryId,
-    medicine: { id: o.medicineId, name: o.name, strength: o.strength, form: o.form },
+    medicine: { id: o.medicineId, name: o.med_name, strength: o.med_strength, form: o.med_form },
     price: o.price,
     stock: stockLabel(o.quantity, o.threshold),
     pharmacy: publicPharmacy(o, here),

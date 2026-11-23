@@ -214,3 +214,21 @@ test('role separation is enforced', async () => {
   const r2 = await call('GET', '/pharmacy/orders', { token: S.pt });
   assert.equal(r2.status, 403);
 });
+
+test('home feed offers carry the medicine name, not the pharmacy name', async () => {
+  const h = await call('GET', '/home?lat=5.55&lng=-0.18');
+  assert.ok(h.offers.length > 0);
+  for (const o of h.offers) assert.notEqual(o.medicine.name, o.pharmacy.name);
+  assert.ok(h.offers.some((o) => o.medicine.name === 'Paracetamol'));
+});
+
+test('column detection handles common pharmacy spreadsheet headers', async () => {
+  const { detectMapping } = await import('../src/lib/stockImport.js');
+  assert.deepEqual(detectMapping(['Item Name', 'Unit Price', 'QOH']), { name: 'Item Name', price: 'Unit Price', quantity: 'QOH' });
+  const m = detectMapping(['Product Code', 'Drug', 'Dosage Form', 'Selling Price (GHS)', 'Stock Level', 'Reorder Level']);
+  assert.equal(m.name, 'Drug');
+  assert.equal(m.price, 'Selling Price (GHS)');
+  assert.equal(m.quantity, 'Stock Level');
+  assert.equal(m.form, 'Dosage Form');
+  assert.equal(m.low_stock_threshold, 'Reorder Level');
+});

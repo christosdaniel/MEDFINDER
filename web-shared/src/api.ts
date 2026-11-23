@@ -1,7 +1,7 @@
 // Tiny fetch wrapper shared by the pharmacy and admin web apps.
 // The token is kept in localStorage so the browser remembers the login.
 
-export const API_URL: string = (import.meta as any).env?.VITE_API_URL || '/api';
+export const API_URL: string = import.meta.env.VITE_API_URL || '/api';
 
 export class ApiError extends Error {
   status: number;

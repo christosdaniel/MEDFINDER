@@ -1,0 +1,7 @@
+{
+  "api": "https://your-medfinder-server/api",
+  "key": "mfsync_paste_your_key_here",
+  "file": "C:\\Pharmacy\\stock.xlsx",
+  "mode": "merge",
+  "interval": 60
+}

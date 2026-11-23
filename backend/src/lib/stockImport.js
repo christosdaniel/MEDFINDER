@@ -26,10 +26,17 @@ const norm = (s) => String(s ?? '').toLowerCase().replace(/[_\-.]+/g, ' ').repla
 export function detectMapping(headers) {
   const mapping = {};
   const used = new Set();
+  // Pass 1: exact header matches for every field. Pass 2: "contains" matches
+  // for fields still missing, in priority order (so "Unit Price" is a price, not a form).
   for (const [field, aliases] of Object.entries(COLUMN_ALIASES)) {
-    // exact match first, then "contains"
-    let hit = headers.find((h) => !used.has(h) && aliases.includes(norm(h)));
-    if (!hit) hit = headers.find((h) => !used.has(h) && aliases.some((a) => a.length > 3 && norm(h).includes(a)));
+    const hit = headers.find((h) => !used.has(h) && aliases.includes(norm(h)));
+    if (hit) { mapping[field] = hit; used.add(hit); }
+  }
+  const priority = ['name', 'price', 'quantity', 'strength', 'sku', 'category', 'form', 'requires_prescription', 'low_stock_threshold'];
+  for (const field of priority) {
+    if (mapping[field]) continue;
+    const aliases = COLUMN_ALIASES[field];
+    const hit = headers.find((h) => !used.has(h) && aliases.some((a) => a.length > 3 && norm(h).includes(a)));
     if (hit) { mapping[field] = hit; used.add(hit); }
   }
   return mapping;
