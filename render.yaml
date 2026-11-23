@@ -1,0 +1,33 @@
+# One-click hosting for the MedFinder API on Render (https://render.com).
+# Render dashboard → New → Blueprint → pick this repository.
+services:
+  - type: web
+    name: medfinder-api
+    runtime: node
+    plan: free
+    buildCommand: npm ci --workspace backend --include-workspace-root=false --omit=dev
+    startCommand: npm start --workspace backend
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22.13.0"
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ADMIN_EMAIL
+        value: admin@medfinder.gh
+      - key: ADMIN_PASSWORD
+        sync: false            # you type this in the Render dashboard
+      - key: CORS_ORIGINS
+        value: https://christosdaniel.github.io
+      # Demo settings. Turn these off once you have real users:
+      # SEED_DEMO loads demo pharmacies/medicines if the database is empty.
+      # EXPOSE_DEV_OTP shows the sign-up code in the app until an SMS provider is connected.
+      - key: SEED_DEMO
+        value: "true"
+      - key: EXPOSE_DEV_OTP
+        value: "true"
+# Note: the free plan has no persistent disk, so the SQLite database is reset
+# when the service restarts or redeploys. For real use, upgrade the service and
+# add a disk (mount path /var/data) and set DB_PATH=/var/data/medfinder.db.

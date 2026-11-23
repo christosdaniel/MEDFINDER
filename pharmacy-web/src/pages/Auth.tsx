@@ -11,7 +11,7 @@ export default function AuthPage() {
   return (
     <div className="auth">
       <aside className="auth-aside">
-        <div className="logo-box"><img src="/logo.png" alt="MedFinder - Find medicine, save time and stay healthy." /></div>
+        <div className="logo-box"><img src={`${import.meta.env.BASE_URL}logo.png`} alt="MedFinder - Find medicine, save time and stay healthy." /></div>
         <div style={{ position: 'relative', zIndex: 1 }}>
           <h1>Reach patients looking for your medicines.</h1>
           <p>List your pharmacy on MedFinder Ghana. Patients nearby see your stock and prices, and order for pickup or delivery.</p>

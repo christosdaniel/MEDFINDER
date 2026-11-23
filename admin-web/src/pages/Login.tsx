@@ -17,7 +17,7 @@ export default function Login() {
   return (
     <div className="auth">
       <aside className="auth-aside">
-        <div className="logo-box"><img src="/logo.png" alt="MedFinder" /></div>
+        <div className="logo-box"><img src={`${import.meta.env.BASE_URL}logo.png`} alt="MedFinder" /></div>
         <div style={{ position: 'relative', zIndex: 1 }}>
           <h1>MedFinder admin console</h1>
           <p>Verify pharmacies, keep listings accurate, handle complaints and control features across the patient app and pharmacy portal.</p>

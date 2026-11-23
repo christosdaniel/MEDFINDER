@@ -1,5 +1,33 @@
 # Deploying MedFinder
 
+## Quick hosted demo: Render (API) + GitHub Pages (web apps)
+
+The pharmacy portal and admin console are static web apps, so GitHub Pages can host them. The API is a server, so it runs on Render (free tier).
+
+**1. Host the API on Render**
+1. Sign in at https://render.com with GitHub.
+2. **New → Blueprint**, pick the `MEDFINDER` repository. Render reads `render.yaml`.
+3. Enter an `ADMIN_PASSWORD` when asked, then **Apply**.
+4. When it's live, open `https://<your-service>.onrender.com/api/health`. You should see `{"ok":true,...}`. Copy the service URL.
+
+Free-plan notes: the service sleeps after 15 minutes without traffic (the first request then takes up to a minute), and the database resets on restart because there's no disk. Demo data is reloaded automatically (`SEED_DEMO=true`). For real users, add a disk and set `DB_PATH` (see `render.yaml`), connect SMS, and set `SEED_DEMO` and `EXPOSE_DEV_OTP` to `false`.
+
+**2. Publish the web apps on GitHub Pages**
+1. Repository **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+2. **Settings → Secrets and variables → Actions → Variables → New repository variable**: name `MEDFINDER_API_URL`, value `https://<your-service>.onrender.com/api`.
+3. **Actions → Deploy web apps to GitHub Pages → Run workflow** (it also runs on every push to `main`).
+
+Then open:
+- `https://christosdaniel.github.io/MEDFINDER/`: landing page
+- `https://christosdaniel.github.io/MEDFINDER/pharmacy/`: pharmacy portal
+- `https://christosdaniel.github.io/MEDFINDER/admin/`: admin console
+
+If the API URL changes, update the variable and re-run the workflow. If your Pages address is different, update `CORS_ORIGINS` in Render.
+
+**3. Point the mobile app at the hosted API (optional)**: set `EXPO_PUBLIC_API_URL=https://<your-service>.onrender.com/api` in `mobile/.env`.
+
+---
+
 ## 1. API (`backend/`)
 
 Any host that runs Node.js 22.13+ with a persistent disk works (a VPS, Render, Railway, Fly.io...).

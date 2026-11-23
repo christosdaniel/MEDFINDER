@@ -50,7 +50,7 @@ export function Icon({ name, size = 20 }: { name: string; size?: number }) {
 export function Logo({ subtitle }: { subtitle?: string }) {
   return (
     <div className="logo">
-      <img src="/favicon.png" alt="" className="logo-mark" />
+      <img src={`${import.meta.env.BASE_URL}favicon.png`} alt="" className="logo-mark" />
       <span className="logo-text">
         <span>MED<b>FINDER</b></span>
         {subtitle && <small>{subtitle}</small>}

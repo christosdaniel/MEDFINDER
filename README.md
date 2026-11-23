@@ -142,6 +142,10 @@ The sync key is in the pharmacy portal. Use `--table Stock` for Access databases
 
 ---
 
+## Hosting online
+
+The pharmacy portal and admin console publish to GitHub Pages and the API to Render (free tier). Setup takes a few clicks; see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#quick-hosted-demo-render-api--github-pages-web-apps).
+
 ## Going to production
 
 See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). In short: set `JWT_SECRET`, `ADMIN_EMAIL`/`ADMIN_PASSWORD` and `CORS_ORIGINS`; plug in an SMS provider for OTP (`backend/src/lib/sms.js`) and a payment provider for subscriptions/MoMo; build the web apps; and build the mobile app with EAS.

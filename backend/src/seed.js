@@ -48,7 +48,7 @@ const PHARMACIES = [
   { name: 'Adum Royal Pharmacy', area: 'Adum', city: 'Kumasi', lat: 6.6910, lng: -1.6270, delivery: 1, fee: 10, bio: 'Central Kumasi pharmacy with a large stock of antimalarials and antibiotics.', hours: 'Daily 7:00–22:00' },
 ];
 
-async function seedDemo() {
+export async function seedDemo() {
   await ensureAdmin();
   if (db.prepare('SELECT COUNT(*) AS n FROM pharmacies').get().n) {
     console.log('Database already has pharmacies; skipping demo data.');

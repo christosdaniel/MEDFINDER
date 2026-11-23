@@ -17,7 +17,8 @@ export const config = {
   // Comma separated list; "*" allows any origin (fine for local development).
   corsOrigins: (process.env.CORS_ORIGINS || '*').split(',').map((s) => s.trim()),
   // In development the OTP is returned in the API response so you can test without SMS.
-  exposeDevOtp: !isProd && process.env.EXPOSE_DEV_OTP !== 'false',
+  // Set EXPOSE_DEV_OTP=true on a hosted demo until an SMS provider is connected.
+  exposeDevOtp: process.env.EXPOSE_DEV_OTP === 'true' || (!isProd && process.env.EXPOSE_DEV_OTP !== 'false'),
   admin: {
     email: process.env.ADMIN_EMAIL || 'admin@medfinder.gh',
     password: process.env.ADMIN_PASSWORD || 'Admin@123',

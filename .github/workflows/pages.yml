@@ -1,0 +1,71 @@
+# Builds the pharmacy web app and admin console and publishes them on GitHub Pages:
+#   https://<owner>.github.io/<repo>/          landing page
+#   https://<owner>.github.io/<repo>/pharmacy/ pharmacy web app
+#   https://<owner>.github.io/<repo>/admin/    admin console
+# One-time setup: Settings → Pages → Source: "GitHub Actions", and
+# Settings → Secrets and variables → Actions → Variables → MEDFINDER_API_URL
+# (e.g. https://medfinder-api.onrender.com/api).
+name: Deploy web apps to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Check API URL
+        run: |
+          if [ -z "${{ vars.MEDFINDER_API_URL }}" ]; then
+            echo "::warning::Repository variable MEDFINDER_API_URL is not set. The apps will load but cannot sign in until it points at your hosted API."
+          fi
+      - name: Build pharmacy web app
+        run: npm run build -w pharmacy-web
+        env:
+          VITE_BASE: /${{ github.event.repository.name }}/pharmacy/
+          VITE_ROUTER: hash
+          VITE_API_URL: ${{ vars.MEDFINDER_API_URL }}
+      - name: Build admin console
+        run: npm run build -w admin-web
+        env:
+          VITE_BASE: /${{ github.event.repository.name }}/admin/
+          VITE_ROUTER: hash
+          VITE_API_URL: ${{ vars.MEDFINDER_API_URL }}
+      - name: Assemble site
+        run: |
+          mkdir -p _site
+          cp -r site/. _site/
+          cp assets/medfinder-logo.png assets/medfinder-icon.png _site/
+          cp -r pharmacy-web/dist _site/pharmacy
+          cp -r admin-web/dist _site/admin
+          touch _site/.nojekyll
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
