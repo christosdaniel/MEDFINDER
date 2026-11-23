@@ -70,7 +70,7 @@ async function seedDemo() {
       medIds.forEach(([name, mid], j) => {
         if ((idx + j) % 5 === 4) return; // not every pharmacy sells everything
         const price = Math.round(BASE_PRICE[name] * (0.9 + ((idx * 7 + j * 3) % 5) * 0.06) * 2) / 2;
-        const qty = name === 'Ibuprofen' ? 0 : ((idx * 13 + j * 17) % 90) + ((idx + j) % 4 === 0 ? 0 : 3);
+        const qty = name === 'Ibuprofen' ? 0 : ((idx * 13 + j * 17) % 90) + ((idx + j) % 6 === 5 ? 0 : 6);
         db.prepare('INSERT INTO inventory (pharmacy_id, medicine_id, price, quantity, low_stock_threshold) VALUES (?, ?, ?, ?, 10)').run(id, mid, price, qty);
       });
     });

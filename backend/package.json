@@ -23,8 +23,5 @@
     "jsonwebtoken": "^9.0.3",
     "mdb-reader": "^3.2.2",
     "multer": "^2.5.0"
-  },
-  "overrides": {
-    "uuid": "^11.1.1"
   }
 }
