@@ -16,7 +16,9 @@
       "supportsTablet": true,
       "bundleIdentifier": "gh.medfinder.app",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "MedFinder uses your location to show pharmacies near you and their distance."
+        "NSLocationWhenInUseUsageDescription": "MedFinder uses your location to show pharmacies near you and their distance.",
+        "NSPhotoLibraryUsageDescription": "MedFinder uses your photos so you can set a profile picture.",
+        "NSCameraUsageDescription": "MedFinder uses your camera so you can take a profile picture."
       }
     },
     "android": {
@@ -25,7 +27,10 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"]
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -40,6 +45,13 @@
         "expo-location",
         {
           "locationWhenInUsePermission": "MedFinder uses your location to show pharmacies near you and their distance."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "MedFinder uses your photos so you can set a profile picture.",
+          "cameraPermission": "MedFinder uses your camera so you can take a profile picture."
         }
       ]
     ],

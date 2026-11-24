@@ -232,3 +232,93 @@ test('column detection handles common pharmacy spreadsheet headers', async () =>
   assert.equal(m.form, 'Dosage Form');
   assert.equal(m.low_stock_threshold, 'Reorder Level');
 });
+
+test('medicine names are split into name, strength and form', async () => {
+  const { splitStrength } = await import('../src/lib/stockImport.js');
+  assert.deepEqual(splitStrength('Paracetamol 500mg Tablets'), { name: 'Paracetamol', strength: '500mg', form: 'Tablets' });
+  assert.deepEqual(splitStrength('Amoxicillin Caps 500mg'), { name: 'Amoxicillin', strength: '500mg', form: 'Capsules' });
+  assert.deepEqual(splitStrength('Coartem 20/120mg'), { name: 'Coartem', strength: '20/120mg', form: null });
+  assert.deepEqual(splitStrength('Cough syrup (Benylin) 100ml'), { name: 'Cough syrup (Benylin)', strength: '100ml', form: null });
+  assert.deepEqual(splitStrength('Panadol Extra'), { name: 'Panadol Extra', strength: '', form: null });
+});
+
+test('real-world spreadsheet: title rows, pack size column, totals row; unreadable files get a clear message', async () => {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Stock List');
+  ws.addRow(['TEST PHARMACY - STOCK LIST']);
+  ws.addRow([]);
+  ws.addRow(['S/N', 'Item Description', 'Pack Size', 'Selling Price', 'Qty In Stock']);
+  ws.addRow([1, 'Paracetamol 500mg Tablets', '100s', 9.5, 120]);
+  ws.addRow([2, 'Amoxicillin Caps 500mg', '21s', 24, 40]);
+  ws.addRow(['', 'TOTAL', '', '', { formula: 'SUM(E4:E5)', result: 160 }]);
+  const fd = new FormData();
+  fd.append('file', new Blob([await wb.xlsx.writeBuffer()]), 'stock-list.xlsx');
+  fd.append('dryRun', 'true');
+  const r = await call('POST', '/pharmacy/inventory/import', { token: S.ph, form: fd });
+  assert.equal(r.status, 200, r.error);
+  assert.equal(r.validRows, 2);
+  assert.deepEqual(r.errors, []);
+  assert.equal(r.mapping.strength, undefined);
+  assert.deepEqual([r.items[0].name, r.items[0].strength, r.items[0].form], ['Paracetamol', '500mg', 'Tablets']);
+
+  const broken = new FormData();
+  broken.append('file', new Blob(['this is not really an excel file']), 'renamed.xlsx');
+  const b = await call('POST', '/pharmacy/inventory/import', { token: S.ph, form: broken });
+  assert.equal(b.status, 400);
+  assert.match(b.error, /couldn't read "renamed\.xlsx"/);
+});
+
+test('pictures: pharmacy logo, medicine photos (with catalogue fallback) and patient profile photo', async () => {
+  const sharp = (await import('sharp')).default;
+  const png = await sharp({ create: { width: 1600, height: 1200, channels: 3, background: '#23a455' } }).png().toBuffer();
+  const form = (name = 'photo.png', buf = png, type = 'image/png') => { const fd = new FormData(); fd.append('image', new Blob([buf], { type }), name); return fd; };
+
+  // pharmacy logo, resized to a 512px square
+  const logo = await call('POST', '/pharmacy/me/logo', { token: S.ph, form: form() });
+  assert.equal(logo.status, 200, logo.error);
+  const logoId = logo.pharmacy.logoImageId;
+  assert.ok(logoId);
+  const imgRes = await fetch(`${base}/images/${logoId}`);
+  assert.equal(imgRes.headers.get('content-type'), 'image/jpeg');
+  const meta = await sharp(Buffer.from(await imgRes.arrayBuffer())).metadata();
+  assert.deepEqual([meta.width, meta.height], [512, 512]);
+  const pub = await call('GET', `/pharmacies/${S.phId}`);
+  assert.equal(pub.pharmacy.logoImageId, logoId);
+
+  // medicine photo on a stock item becomes the catalogue default too
+  const inv = await call('GET', '/pharmacy/inventory?q=Paracetamol', { token: S.ph });
+  const item = inv.items[0];
+  const up = await call('POST', `/pharmacy/inventory/${item.id}/image`, { token: S.ph, form: form('pack.png') });
+  assert.equal(up.status, 200, up.error);
+  assert.ok(up.item.imageId);
+  assert.ok(up.item.catalogueImageId);
+  assert.notEqual(up.item.imageId, up.item.catalogueImageId);
+  const search = await call('GET', '/medicines/search?q=Paracetamol');
+  assert.ok(search.results[0].imageId);
+  const compare = await call('GET', `/medicines/${item.medicineId}/pharmacies`);
+  assert.equal(compare.pharmacies[0].imageId, up.item.imageId);
+  assert.equal(compare.pharmacies[0].pharmacy.logoImageId, logoId);
+
+  // replacing a photo removes the old one
+  const up2 = await call('POST', `/pharmacy/inventory/${item.id}/image`, { token: S.ph, form: form('pack2.png') });
+  assert.notEqual(up2.item.imageId, up.item.imageId);
+  assert.equal((await fetch(`${base}/images/${up.item.imageId}`)).status, 404);
+
+  // patient profile photo, visible to the pharmacy on orders
+  const av = await call('POST', '/patient/me/avatar', { token: S.pt, form: form('me.png') });
+  assert.equal(av.status, 200, av.error);
+  assert.ok(av.patient.avatarImageId);
+  const orders = await call('GET', '/pharmacy/orders?status=history', { token: S.ph });
+  assert.equal(orders.orders[0].patient.avatarImageId, av.patient.avatarImageId);
+
+  // non-images are rejected with a clear message
+  const badUp = await call('POST', '/patient/me/avatar', { token: S.pt, form: form('notes.txt', Buffer.from('hello'), 'text/plain') });
+  assert.equal(badUp.status, 400);
+  const fakeJpg = await call('POST', '/patient/me/avatar', { token: S.pt, form: form('fake.jpg', Buffer.from('not an image'), 'image/jpeg') });
+  assert.equal(fakeJpg.status, 400);
+  assert.match(fakeJpg.error, /couldn't read that photo/);
+
+  // removing
+  const del = await call('DELETE', '/patient/me/avatar', { token: S.pt });
+  assert.equal(del.patient.avatarImageId, null);
+});

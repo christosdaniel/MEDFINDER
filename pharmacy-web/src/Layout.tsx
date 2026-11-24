@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Badge, Icon, Logo, NotificationBell, timeAgo } from '@medfinder/web-shared';
+import { Badge, Icon, Logo, NotificationBell, Thumb, imageUrl, timeAgo } from '@medfinder/web-shared';
 import { api } from './api';
 import { useAuth } from './auth';
 
@@ -49,7 +49,7 @@ export default function Layout() {
         </nav>
         <div className="sidebar-foot">
           <div className="row">
-            <span className="avatar">{pharmacy.name[0]}</span>
+            <Thumb src={imageUrl(pharmacy.logoImageId)} label={pharmacy.name} size={40} />
             <div style={{ minWidth: 0 }}>
               <strong style={{ display: 'block', fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pharmacy.name}</strong>
               <Badge>{pharmacy.approvalStatus}</Badge>

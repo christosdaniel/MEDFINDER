@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Button, Card, Empty, ErrorBox, Header, Input, s } from '../components/ui';
 import { api } from '../lib/api';
+import MedicineIcon from '../components/MedicineIcon';
 import { useSession } from '../lib/session';
 import { colors, money } from '../lib/theme';
 
@@ -59,6 +60,7 @@ export default function Checkout() {
           <Card style={{ gap: 4, paddingVertical: 6 }}>
             {cart.items.map((i, idx) => (
               <View key={i.medicineId} style={[s.row, { paddingVertical: 10 }, idx > 0 && { borderTopWidth: 1, borderTopColor: colors.line }]}>
+                <MedicineIcon name={i.name} imageId={i.imageId} size={44} />
                 <View style={{ flex: 1 }}><Text style={s.h3}>{i.name} <Text style={s.muted}>{i.strength}</Text></Text><Text style={s.muted}>{money(i.price)} each</Text></View>
                 <View style={[s.row, { gap: 6 }]}>
                   <Pressable onPress={() => setQty(i.medicineId, i.quantity - 1)} style={step}><Ionicons name={i.quantity === 1 ? 'trash-outline' : 'remove'} size={16} color={colors.green} /></Pressable>

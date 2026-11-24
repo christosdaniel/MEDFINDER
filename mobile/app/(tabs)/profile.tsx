@@ -1,15 +1,38 @@
-import { Alert, Linking, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { useState } from 'react';
+import { ActivityIndicator, Alert, Linking, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Avatar, Card, s } from '../../components/ui';
+import { Card, s } from '../../components/ui';
+import { ProfilePic, pickPhoto } from '../../components/Photo';
+import { api } from '../../lib/api';
+import { show } from '../../lib/dialog';
 import { useSession } from '../../lib/session';
 import { colors } from '../../lib/theme';
 
 export default function Profile() {
   const router = useRouter();
-  const { patient, signOut, supportPhone } = useSession();
+  const { patient, setPatient, signOut, supportPhone } = useSession();
+  const [uploading, setUploading] = useState(false);
   if (!patient) return null;
+
+  const upload = async (source: 'library' | 'camera') => {
+    const asset = await pickPhoto(source);
+    if (!asset) return;
+    setUploading(true);
+    try { const r = await api.upload('/patient/me/avatar', asset); setPatient(r.patient); }
+    catch (e: any) { show('Could not upload photo', e.message); } finally { setUploading(false); }
+  };
+  const removePhoto = async () => { try { const r = await api.del('/patient/me/avatar'); setPatient(r.patient); } catch (e: any) { show('Could not remove photo', e.message); } };
+  const changePhoto = () => {
+    if (Platform.OS === 'web') { upload('library'); return; }
+    Alert.alert('Profile picture', undefined, [
+      { text: 'Take a photo', onPress: () => upload('camera') },
+      { text: 'Choose from photos', onPress: () => upload('library') },
+      ...(patient.avatarImageId ? [{ text: 'Remove photo', style: 'destructive' as const, onPress: removePhoto }] : []),
+      { text: 'Cancel', style: 'cancel' as const },
+    ]);
+  };
 
   const confirmSignOut = () => {
     if (Platform.OS === 'web') { signOut(); return; }
@@ -32,11 +55,17 @@ export default function Profile() {
       <ScrollView contentContainerStyle={s.pad}>
         <Text style={s.h1}>Profile</Text>
         <Card style={[s.row, { gap: 14 }]}>
-          <Avatar letter={patient.firstName[0]} size={58} />
+          <Pressable onPress={changePhoto} accessibilityLabel="Change profile picture">
+            <ProfilePic imageId={patient.avatarImageId} label={patient.firstName} size={66} />
+            <View style={{ position: 'absolute', right: -2, bottom: -2, width: 26, height: 26, borderRadius: 13, backgroundColor: colors.green, borderWidth: 2, borderColor: '#fff', alignItems: 'center', justifyContent: 'center' }}>
+              {uploading ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="camera" size={13} color="#fff" />}
+            </View>
+          </Pressable>
           <View style={{ flex: 1 }}>
             <Text style={s.h2}>{patient.firstName} {patient.lastName}</Text>
             <Text style={s.muted}>{patient.phone}</Text>
             {patient.email && <Text style={s.muted}>{patient.email}</Text>}
+            <Pressable onPress={changePhoto}><Text style={{ color: colors.green3, fontWeight: '600', marginTop: 4 }}>{patient.avatarImageId ? 'Change photo' : 'Add a profile photo'}</Text></Pressable>
           </View>
         </Card>
         <Card style={{ paddingVertical: 4 }}>

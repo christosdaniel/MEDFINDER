@@ -247,3 +247,49 @@ export function NotificationBell({ load, markRead, onOpenItem, timeAgo }: {
     </div>
   );
 }
+
+/** Picture with a coloured-letter fallback. `round` for people, square-ish for things. */
+export function Thumb({ src, label, size = 40, round = false }: { src?: string | null; label: string; size?: number; round?: boolean }) {
+  const [failed, setFailed] = useState(false);
+  const style = { width: size, height: size, borderRadius: round ? '50%' : Math.round(size * 0.25), flexShrink: 0 } as const;
+  if (src && !failed) return <img src={src} alt={label} onError={() => setFailed(true)} style={{ ...style, objectFit: 'cover', background: '#fff', border: '1px solid var(--line)' }} />;
+  return <span className="avatar" style={{ ...style, fontSize: Math.round(size * 0.42) }} aria-label={label}>{(label || '?').trim()[0]?.toUpperCase()}</span>;
+}
+
+/**
+ * Click-to-upload picture. Opens the file picker (or camera on phones),
+ * calls onUpload with the chosen file and shows a spinner meanwhile.
+ */
+export function PhotoPicker({ src, label, size = 96, round = false, onUpload, onRemove, hint }: {
+  src?: string | null; label: string; size?: number; round?: boolean;
+  onUpload: (file: File) => Promise<unknown>; onRemove?: () => Promise<unknown>; hint?: string;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const pick = (file?: File | null) => {
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) { setError('That photo is over 10 MB. Choose a smaller one.'); return; }
+    setBusy(true); setError('');
+    onUpload(file).catch((e) => setError(e.message)).finally(() => setBusy(false));
+  };
+  return (
+    <div className="row" style={{ gap: 16, alignItems: 'center' }}>
+      <label style={{ position: 'relative', cursor: 'pointer' }} title="Change picture">
+        <Thumb src={src} label={label} size={size} round={round} />
+        <span style={{ position: 'absolute', right: -4, bottom: -4, width: 30, height: 30, borderRadius: '50%', background: 'var(--green)', color: '#fff', display: 'grid', placeItems: 'center', border: '2px solid #fff' }}>
+          {busy ? <span className="spinner" /> : <Icon name="edit" size={14} />}
+        </span>
+        <input type="file" accept="image/*" hidden onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ''; }} />
+      </label>
+      <div className="stack" style={{ gap: 6 }}>
+        <label className="btn btn-secondary btn-sm" style={{ cursor: 'pointer', width: 'fit-content' }}>
+          <Icon name="upload" size={16} /> {src ? 'Change picture' : 'Upload picture'}
+          <input type="file" accept="image/*" hidden onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ''; }} />
+        </label>
+        {src && onRemove && <button type="button" className="btn btn-ghost btn-sm" style={{ width: 'fit-content' }} onClick={() => { setBusy(true); onRemove().finally(() => setBusy(false)); }}>Remove</button>}
+        {hint && <span className="muted small">{hint}</span>}
+        {error && <span className="small" style={{ color: 'var(--red)' }}>{error}</span>}
+      </div>
+    </div>
+  );
+}

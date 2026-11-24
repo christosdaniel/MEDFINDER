@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Badge, Button, Field, fmtDate, useToast } from '@medfinder/web-shared';
+import { Badge, Button, Field, PhotoPicker, fmtDate, imageUrl, useToast } from '@medfinder/web-shared';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import LocationPicker from '../components/LocationPicker';
@@ -28,6 +28,20 @@ export default function Profile() {
   return (
     <form className="stack" onSubmit={save}>
       {error && <div className="error-box">{error}</div>}
+      <div className="card">
+        <h3>Profile picture</h3>
+        <p className="muted small mt-s">Your logo or a photo of your shopfront. Patients see it in search results and on your pharmacy page, so they can recognise you.</p>
+        <div className="mt">
+          <PhotoPicker
+            src={imageUrl(pharmacy.logoImageId)}
+            label={pharmacy.name}
+            size={112}
+            hint="Square pictures work best. JPG or PNG, up to 10 MB."
+            onUpload={async (file) => { const fd = new FormData(); fd.append('image', file); const r = await api.post('/pharmacy/me/logo', fd); setPharmacy(r.pharmacy); toast('Profile picture updated'); }}
+            onRemove={async () => { const r = await api.del('/pharmacy/me/logo'); setPharmacy(r.pharmacy); }}
+          />
+        </div>
+      </div>
       <div className="card">
         <div className="card-head"><h3>Pharmacy details</h3><div className="row"><Badge>{pharmacy.approvalStatus}</Badge><span className="muted small">Joined {fmtDate(pharmacy.createdAt)}</span></div></div>
         <div className="grid-2">

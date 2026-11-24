@@ -83,3 +83,6 @@ export function timeAgo(s?: string | null) {
 }
 export const fmtDate = (s?: string | null) => parseDate(s)?.toLocaleDateString('en-GH', { day: 'numeric', month: 'short', year: 'numeric' }) ?? '—';
 export const fmtDateTime = (s?: string | null) => parseDate(s)?.toLocaleString('en-GH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) ?? '—';
+
+/** URL of a stored picture (pharmacy logo, patient photo, medicine photo). */
+export const imageUrl = (id?: number | null) => (id ? `${API_URL}/images/${id}` : null);

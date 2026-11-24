@@ -11,6 +11,7 @@ import { notify } from '../lib/notify.js';
 import { sendSms } from '../lib/sms.js';
 import { VISIBLE } from './public.js';
 import { serializeOrder, loadOrder } from './orders-common.js';
+import { imageUpload, saveImage, deleteImage } from '../lib/images.js';
 
 const r = Router();
 
@@ -29,6 +30,7 @@ export function patientProfile(p) {
     lng: p.lng,
     phoneVerified: !!p.phone_verified,
     createdAt: p.created_at,
+    avatarImageId: p.avatar_image_id ?? null,
   };
 }
 
@@ -158,6 +160,20 @@ r.patch('/me', (req, res) => {
   res.json({ patient: patientProfile(me(req)) });
 });
 
+// ---------- Profile picture ----------
+r.post('/me/avatar', imageUpload.single('image'), async (req, res) => {
+  const p = me(req);
+  const id = await saveImage(req.file, 'patient_avatar', p.id, { preset: 'square', oldId: p.avatar_image_id });
+  db.prepare('UPDATE patients SET avatar_image_id = ? WHERE id = ?').run(id, p.id);
+  res.json({ patient: patientProfile(me(req)) });
+});
+r.delete('/me/avatar', (req, res) => {
+  const p = me(req);
+  deleteImage(p.avatar_image_id);
+  db.prepare('UPDATE patients SET avatar_image_id = NULL WHERE id = ?').run(p.id);
+  res.json({ patient: patientProfile(me(req)) });
+});
+
 r.post('/me/password', async (req, res) => {
   const v = validate(req.body, { currentPassword: { required: true }, newPassword: { required: true, min: 6, max: 100 } });
   const p = me(req);
@@ -172,7 +188,8 @@ r.delete('/me', async (req, res) => {
   const open = db.prepare(`SELECT COUNT(*) AS n FROM orders WHERE patient_id = ? AND status IN ('pending','accepted','preparing','ready','out_for_delivery')`).get(p.id).n;
   if (open) throw bad('You have orders in progress. Cancel or complete them before deleting your account.');
   // Keep order history for pharmacies but remove personal details.
-  db.prepare(`UPDATE patients SET first_name = 'Deleted', last_name = 'User', phone = ?, email = NULL, address = NULL, lat = NULL, lng = NULL, push_token = NULL, status = 'suspended', password_hash = '' WHERE id = ?`)
+  deleteImage(p.avatar_image_id);
+  db.prepare(`UPDATE patients SET avatar_image_id = NULL, first_name = 'Deleted', last_name = 'User', phone = ?, email = NULL, address = NULL, lat = NULL, lng = NULL, push_token = NULL, status = 'suspended', password_hash = '' WHERE id = ?`)
     .run(`deleted-${p.id}-${Date.now()}`, p.id);
   res.json({ ok: true });
 });

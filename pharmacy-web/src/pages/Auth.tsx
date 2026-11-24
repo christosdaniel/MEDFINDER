@@ -69,6 +69,7 @@ function Register({ onSwitch }: { onSwitch: () => void }) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [logo, setLogo] = useState<File | null>(null);
   const set = (k: string) => (e: any) => setF({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value });
 
   const stepFields = [
@@ -96,7 +97,13 @@ function Register({ onSwitch }: { onSwitch: () => void }) {
       const { confirm: _c, ...body } = f;
       if (body.lat === null) { delete body.lat; delete body.lng; }
       const r = await api.post('/pharmacy/auth/register', body);
-      signIn(r.token, r.pharmacy);
+      let pharmacy = r.pharmacy;
+      if (logo) {
+        api.setToken(r.token);
+        const fd = new FormData(); fd.append('image', logo);
+        pharmacy = (await api.post('/pharmacy/me/logo', fd).catch(() => ({ pharmacy }))).pharmacy;
+      }
+      signIn(r.token, pharmacy);
     } catch (err: any) {
       setError(err.message);
       if (err.details) setErrors(err.details);
@@ -148,6 +155,15 @@ function Register({ onSwitch }: { onSwitch: () => void }) {
           <>
             <Field label="Password" error={errors.password} hint="At least 8 characters"><input type="password" autoComplete="new-password" value={f.password || ''} onChange={set('password')} /></Field>
             <Field label="Confirm password" error={errors.confirm}><input type="password" autoComplete="new-password" value={f.confirm || ''} onChange={set('confirm')} /></Field>
+            <Field label="Profile picture (optional)" hint="Your logo or a photo of your shopfront, so patients recognise you. You can add it later in your profile.">
+              <div className="row">
+                {logo && <img src={URL.createObjectURL(logo)} alt="" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 14, border: '1px solid var(--line)' }} />}
+                <label className="btn btn-secondary btn-sm" style={{ cursor: 'pointer' }}>
+                  <Icon name="upload" size={16} /> {logo ? 'Choose another picture' : 'Choose picture'}
+                  <input type="file" accept="image/*" hidden onChange={(e) => setLogo(e.target.files?.[0] || null)} />
+                </label>
+              </div>
+            </Field>
             <div className="info-box"><Icon name="shield" /><span>After you register, MedFinder checks your licence. Your pharmacy becomes visible to patients once approved. You get a free trial period to start.</span></div>
           </>
         )}

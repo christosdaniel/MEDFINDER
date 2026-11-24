@@ -251,6 +251,31 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 `);
 
+// Pictures (pharmacy logos, patient profile photos, medicine photos) are stored
+// in the database so they live and get backed up with everything else.
+db.exec(`
+CREATE TABLE IF NOT EXISTS images (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  owner_type TEXT NOT NULL,                         -- pharmacy_logo | patient_avatar | inventory | medicine
+  owner_id INTEGER NOT NULL,
+  mime TEXT NOT NULL,
+  data BLOB NOT NULL,
+  width INTEGER,
+  height INTEGER,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+`);
+
+/** Add a column to an existing table if it isn't there yet (simple migrations). */
+function addColumn(table, column, type) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+  if (!cols.includes(column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+}
+addColumn('pharmacies', 'logo_image_id', 'INTEGER');
+addColumn('patients', 'avatar_image_id', 'INTEGER');
+addColumn('inventory', 'image_id', 'INTEGER');
+addColumn('medicines', 'image_id', 'INTEGER');
+
 const defaultFlags = [
   ['delivery', 'Home delivery', 'Patients can choose delivery when the pharmacy offers it', 'all'],
   ['momo_payments', 'Mobile Money payments', 'Show Mobile Money as a payment option at checkout', 'patient'],

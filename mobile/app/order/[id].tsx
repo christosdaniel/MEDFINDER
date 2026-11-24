@@ -5,6 +5,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Badge, Button, Card, ErrorBox, Header, Loading, s } from '../../components/ui';
 import { api, type Order } from '../../lib/api';
+import MedicineIcon from '../../components/MedicineIcon';
+import { ProfilePic } from '../../components/Photo';
 import { useApi } from '../../lib/session';
 import { colors, fmtDateTime, money } from '../../lib/theme';
 import { confirmBox, show } from '../../lib/dialog';
@@ -80,7 +82,7 @@ export default function OrderScreen() {
         </Card>
 
         <Card style={{ gap: 10 }}>
-          <Text style={s.h3}>{o.pharmacy.name}</Text>
+          <View style={s.row}><ProfilePic imageId={o.pharmacy.logoImageId} label={o.pharmacy.name} size={40} round={false} icon="storefront" /><Text style={[s.h3, { flex: 1 }]}>{o.pharmacy.name}</Text></View>
           <Text style={s.muted}>{o.pharmacy.address}{o.pharmacy.area ? `, ${o.pharmacy.area}` : ''}</Text>
           <View style={s.row}>
             <Button title="Call pharmacy" icon="call" small variant="secondary" style={{ flex: 1 }} onPress={() => Linking.openURL(`tel:${o.pharmacy.phone}`)} />
@@ -93,7 +95,7 @@ export default function OrderScreen() {
           <Text style={s.muted}>{o.method === 'delivery' ? o.deliveryAddress : 'Collect at the pharmacy'} · {o.paymentMethod === 'momo' ? 'Mobile Money' : 'Cash'}</Text>
           <View style={s.divider} />
           {o.items.map((i) => (
-            <View key={i.medicineId} style={s.rowBetween}><Text style={s.body}>{i.name} {i.strength} × {i.quantity}</Text><Text style={s.body}>{money(i.unitPrice * i.quantity)}</Text></View>
+            <View key={i.medicineId} style={s.rowBetween}><View style={[s.row, { flex: 1 }]}><MedicineIcon name={i.name} imageId={i.imageId} size={36} /><Text style={[s.body, { flex: 1 }]}>{i.name} {i.strength} × {i.quantity}</Text></View><Text style={s.body}>{money(i.unitPrice * i.quantity)}</Text></View>
           ))}
           {o.deliveryFee > 0 && <View style={s.rowBetween}><Text style={s.muted}>Delivery fee</Text><Text style={s.body}>{money(o.deliveryFee)}</Text></View>}
           <View style={s.rowBetween}><Text style={s.h3}>Total</Text><Text style={[s.h3, { color: colors.green }]}>{money(o.total)}</Text></View>

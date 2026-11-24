@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Badge, Button, Card, ErrorBox, Header, Loading, s } from '../../components/ui';
 import MedicineIcon from '../../components/MedicineIcon';
+import { PhotoViewer, ProfilePic } from '../../components/Photo';
 import PharmacyMap from '../../components/PharmacyMap';
 import { api, type PharmacySummary, type StockLine } from '../../lib/api';
 import { useApi, useSession } from '../../lib/session';
@@ -17,12 +18,16 @@ type Resp = { pharmacy: PharmacySummary & { completedOrders: number; lastStockUp
 export default function PharmacyScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { q, coords, cart, addToCart, setQty } = useSession();
+  const { q, coords, cart, addToCart, setQty, patient } = useSession();
   const [filter, setFilter] = useState('');
   const [fav, setFav] = useState(false);
+  const [viewing, setViewing] = useState<{ id: number; title: string } | null>(null);
   const { data, loading, error } = useApi<Resp>(`/pharmacies/${id}?${q}`, [id, q]);
 
-  useEffect(() => { api.get('/patient/favorites').then((r) => setFav(r.pharmacyIds.includes(Number(id)))).catch(() => {}); }, [id]);
+  useEffect(() => {
+    if (!patient) return;
+    api.get('/patient/favorites').then((r) => setFav(r.pharmacyIds.includes(Number(id)))).catch(() => {});
+  }, [id, patient]);
   const toggleFav = async () => { setFav(!fav); try { fav ? await api.del(`/patient/favorites/${id}`) : await api.put(`/patient/favorites/${id}`); } catch { setFav(fav); } };
 
   if (loading && !data) return <SafeAreaView style={s.screen}><Header title="Pharmacy" /><Loading /></SafeAreaView>;
@@ -42,7 +47,7 @@ export default function PharmacyScreen() {
     Linking.openURL(url).catch(() => Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${dest}`));
   };
   const add = (line: StockLine) => {
-    const go = () => addToCart(p, { medicineId: line.medicine.id, name: line.medicine.name, strength: line.medicine.strength, price: line.price });
+    const go = () => addToCart(p, { medicineId: line.medicine.id, name: line.medicine.name, strength: line.medicine.strength, price: line.price, imageId: line.imageId });
     if (cart && cart.pharmacy.id !== p.id) confirmBox('Start a new cart?', `Your cart has items from ${cart.pharmacy.name}. Orders are placed with one pharmacy at a time.`, go);
     else go();
   };
@@ -55,7 +60,8 @@ export default function PharmacyScreen() {
         {p.lat && p.lng && <PharmacyMap pins={[{ id: p.id, lat: p.lat, lng: p.lng, title: p.name }]} me={coords.source !== 'default' ? coords : null} height={180} />}
         <Card style={{ gap: 12 }}>
           <View style={s.rowBetween}>
-            <Text style={s.h2}>{p.name}</Text>
+            <ProfilePic imageId={p.logoImageId} label={p.name} size={60} round={false} icon="storefront" />
+            <Text style={[s.h2, { flex: 1 }]}>{p.name}</Text>
             {p.distanceKm !== null && <Badge label={km(p.distanceKm)} tone="green" />}
           </View>
           {p.bio && <Text style={s.body}>{p.bio}</Text>}
@@ -83,7 +89,9 @@ export default function PharmacyScreen() {
             const qty = inCart(line.medicine.id);
             return (
               <View key={line.inventoryId} style={[s.row, { paddingVertical: 12 }, i > 0 && { borderTopWidth: 1, borderTopColor: colors.line }, out && { opacity: 0.55 }]}>
-                <MedicineIcon name={line.medicine.name} size={40} />
+                <Pressable disabled={!line.imageId} onPress={() => line.imageId && setViewing({ id: line.imageId, title: `${line.medicine.name} ${line.medicine.strength}` })}>
+                  <MedicineIcon name={line.medicine.name} imageId={line.imageId} size={52} />
+                </Pressable>
                 <View style={{ flex: 1, gap: 3 }}>
                   <Text style={s.h3}>{line.medicine.name} <Text style={s.muted}>{line.medicine.strength}</Text></Text>
                   <View style={s.row}><Text style={{ fontWeight: '800', color: colors.green }}>{money(line.price)}</Text><Badge label={line.stock} /></View>
@@ -103,6 +111,7 @@ export default function PharmacyScreen() {
           <Text style={[s.muted, { textAlign: 'center' }]}><Ionicons name="flag-outline" size={13} /> Wrong stock or price? Report it</Text>
         </Pressable>
       </ScrollView>
+      <PhotoViewer imageId={viewing?.id ?? null} title={viewing?.title} onClose={() => setViewing(null)} />
       {cartCount > 0 && (
         <View style={{ position: 'absolute', left: 18, right: 18, bottom: 24 }}>
           <Button title={`View cart · ${cartCount} item${cartCount > 1 ? 's' : ''} · ${money(cart!.items.reduce((t, i) => t + i.price * i.quantity, 0))}`} icon="cart" onPress={() => router.push('/checkout')} />

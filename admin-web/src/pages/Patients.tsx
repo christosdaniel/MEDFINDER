@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Badge, Button, Empty, Icon, Spinner, fmtDate, timeAgo, useLoad, useToast } from '@medfinder/web-shared';
+import { Badge, Button, Empty, Icon, Spinner, Thumb, fmtDate, imageUrl, timeAgo, useLoad, useToast } from '@medfinder/web-shared';
 import { api } from '../api';
 
 export default function Patients() {
@@ -19,7 +19,7 @@ export default function Patients() {
             <thead><tr><th>Name</th><th>Phone</th><th>Verified</th><th className="num">Orders</th><th>Joined</th><th>Last login</th><th>Status</th><th /></tr></thead>
             <tbody>{data.patients.map((p: any) => (
               <tr key={p.id}>
-                <td><strong>{p.firstName} {p.lastName}</strong><div className="muted small">{p.email || ''}</div></td>
+                <td><span className="row" style={{ gap: 10 }}><Thumb src={imageUrl(p.avatarImageId)} label={p.firstName} size={34} round /><span><strong>{p.firstName} {p.lastName}</strong><div className="muted small">{p.email || ''}</div></span></span></td>
                 <td>{p.phone}</td>
                 <td>{p.phoneVerified ? <Badge tone="green">Yes</Badge> : <Badge tone="grey">No</Badge>}</td>
                 <td className="num">{p.ordersCount}</td>
