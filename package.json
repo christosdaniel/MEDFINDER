@@ -1,0 +1,23 @@
+{
+  "name": "medfinder",
+  "private": true,
+  "description": "MedFinder Ghana: patient mobile app, pharmacy web app, admin console and API",
+  "workspaces": [
+    "backend",
+    "web-shared",
+    "pharmacy-web",
+    "admin-web"
+  ],
+  "scripts": {
+    "seed": "npm run seed -w backend",
+    "dev:api": "npm run dev -w backend",
+    "dev:pharmacy": "npm run dev -w pharmacy-web",
+    "dev:admin": "npm run dev -w admin-web",
+    "build": "npm run build -w pharmacy-web && npm run build -w admin-web",
+    "test": "npm test -w backend",
+    "typecheck": "npm run typecheck -w pharmacy-web && npm run typecheck -w admin-web"
+  },
+  "overrides": {
+    "uuid": "^11.1.1"
+  }
+}

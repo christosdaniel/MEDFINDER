@@ -1,0 +1,13 @@
+node_modules/
+dist/
+build/
+.expo/
+web-build/
+*.log
+.env
+.env.local
+backend/data/*.db
+backend/data/*.db-*
+backend/uploads/
+tools/stock-sync-agent/config.json
+.DS_Store
