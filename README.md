@@ -144,7 +144,7 @@ The sync key is in the pharmacy portal. Use `--table Stock` for Access databases
 
 ## Hosting online
 
-The pharmacy portal and admin console publish to GitHub Pages and the API to Render (free tier). Setup takes a few clicks; see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#quick-hosted-demo-render-api--github-pages-web-apps).
+The patient app (web version), pharmacy portal and admin console publish to GitHub Pages and the API to Render (free tier). To test all three together, follow [docs/TESTING.md](docs/TESTING.md). Setup takes a few clicks; see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#quick-hosted-demo-render-api--github-pages-web-apps).
 
 ## Going to production
 

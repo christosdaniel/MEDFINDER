@@ -21,6 +21,7 @@ Then open:
 - `https://christosdaniel.github.io/MEDFINDER/`: landing page
 - `https://christosdaniel.github.io/MEDFINDER/pharmacy/`: pharmacy portal
 - `https://christosdaniel.github.io/MEDFINDER/admin/`: admin console
+- `https://christosdaniel.github.io/MEDFINDER/app/`: patient app (web version, works on laptops and phone browsers)
 
 If the API URL changes, update the variable and re-run the workflow. If your Pages address is different, update `CORS_ORIGINS` in Render.
 

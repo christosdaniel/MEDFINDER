@@ -11,10 +11,10 @@
     :root { --green: #0b4a2e; --green2: #23a455; --tint: #e7f1ec; --muted: #5b6b62; --line: #dce6e0; }
     * { box-sizing: border-box; }
     body { margin: 0; font-family: Inter, system-ui, sans-serif; background: #f4f8f5; color: #173229; }
-    main { max-width: 880px; margin: 0 auto; padding: 48px 16px; text-align: center; }
+    main { max-width: 980px; margin: 0 auto; padding: 48px 16px; text-align: center; }
     img.logo { width: min(440px, 100%); height: auto; }
     p.lead { color: var(--muted); font-size: 18px; margin: 12px 0 36px; }
-    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; text-align: left; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px; text-align: left; }
     a.card { display: block; background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 22px; text-decoration: none; color: inherit; transition: border-color .15s, transform .15s; }
     a.card:hover { border-color: var(--green2); transform: translateY(-2px); }
     a.card h2 { margin: 0 0 6px; font-size: 19px; color: var(--green); }
@@ -28,6 +28,11 @@
     <img class="logo" src="medfinder-logo.png" alt="MedFinder – Find medicine, save time and stay healthy." />
     <p class="lead">Find medicine at pharmacies near you. Pickup or delivery.</p>
     <div class="cards">
+      <a class="card" href="app/">
+        <h2>Find medicine</h2>
+        <p>Patients: search medicines, compare prices at pharmacies near you, and order for pickup or delivery.</p>
+        <span>Open MedFinder →</span>
+      </a>
       <a class="card" href="pharmacy/">
         <h2>For pharmacies</h2>
         <p>Register your pharmacy, link your Excel or Access stock file, and manage orders from patients.</p>
@@ -39,7 +44,7 @@
         <span>Open admin console →</span>
       </a>
     </div>
-    <p class="note">Patients use the MedFinder mobile app on iPhone and Android.</p>
+    <p class="note">On a phone, open "Find medicine" in Safari or Chrome and choose <b>Add to Home Screen</b> to use it like an app.</p>
   </main>
 </body>
 </html>

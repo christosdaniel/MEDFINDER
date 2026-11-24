@@ -2,6 +2,7 @@
 #   https://<owner>.github.io/<repo>/          landing page
 #   https://<owner>.github.io/<repo>/pharmacy/ pharmacy web app
 #   https://<owner>.github.io/<repo>/admin/    admin console
+#   https://<owner>.github.io/<repo>/app/      patient app (web version)
 # One-time setup: Settings → Pages → Source: "GitHub Actions", and
 # Settings → Secrets and variables → Actions → Variables → MEDFINDER_API_URL
 # (e.g. https://medfinder-api.onrender.com/api).
@@ -30,7 +31,12 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            mobile/package-lock.json
       - run: npm ci
+      - run: npm ci
+        working-directory: mobile
       - name: Check API URL
         run: |
           if [ -z "${{ vars.MEDFINDER_API_URL }}" ]; then
@@ -48,6 +54,12 @@ jobs:
           VITE_BASE: /${{ github.event.repository.name }}/admin/
           VITE_ROUTER: hash
           VITE_API_URL: ${{ vars.MEDFINDER_API_URL }}
+      - name: Build patient web app
+        working-directory: mobile
+        run: npx expo export --platform web --output-dir dist
+        env:
+          EXPO_BASE_URL: /${{ github.event.repository.name }}/app
+          EXPO_PUBLIC_API_URL: ${{ vars.MEDFINDER_API_URL }}
       - name: Assemble site
         run: |
           mkdir -p _site
@@ -55,6 +67,9 @@ jobs:
           cp assets/medfinder-logo.png assets/medfinder-icon.png _site/
           cp -r pharmacy-web/dist _site/pharmacy
           cp -r admin-web/dist _site/admin
+          cp -r mobile/dist _site/app
+          # Pages serves /404.html for unknown paths: let the patient app handle its own links.
+          cp mobile/dist/index.html _site/404.html
           touch _site/.nojekyll
       - uses: actions/upload-pages-artifact@v3
         with:
