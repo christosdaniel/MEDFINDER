@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Badge, Chip, Empty, Loading, s } from '../../components/ui';
 import MedicineIcon from '../../components/MedicineIcon';
+import { ProfilePic } from '../../components/Photo';
 import { api, type MedicineSummary, type PharmacySummary } from '../../lib/api';
 import { useSession } from '../../lib/session';
 import { colors, km, money } from '../../lib/theme';
@@ -74,7 +75,7 @@ export default function Search() {
           ListEmptyComponent={<Empty icon="search" title="No medicines found" text="Check the spelling or try the generic name." />}
           renderItem={({ item: m }) => (
             <Pressable onPress={() => router.push(`/medicine/${m.id}`)} style={[s.card, s.row]}>
-              <MedicineIcon name={m.name} />
+              <MedicineIcon name={m.name} imageId={m.imageId} size={52} />
               <View style={{ flex: 1, gap: 2 }}>
                 <Text style={s.h3}>{m.name} <Text style={s.muted}>{m.strength}</Text></Text>
                 <Text style={s.muted}>{[m.form, m.category].filter(Boolean).join(' · ')}</Text>
@@ -94,7 +95,7 @@ export default function Search() {
           ListEmptyComponent={<Empty icon="storefront-outline" title="No pharmacies found" />}
           renderItem={({ item: p }) => (
             <Pressable onPress={() => router.push(`/pharmacy/${p.id}`)} style={[s.card, s.row]}>
-              <Ionicons name="storefront" size={24} color={colors.green3} />
+              <ProfilePic imageId={p.logoImageId} label={p.name} size={44} round={false} icon="storefront" />
               <View style={{ flex: 1 }}><Text style={s.h3}>{p.name}</Text><Text style={s.muted}>{[p.area, p.city].filter(Boolean).join(', ')}</Text></View>
               <Text style={s.muted}>{km(p.distanceKm)}</Text>
             </Pressable>

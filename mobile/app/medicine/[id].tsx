@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Badge, Button, Card, Chip, Empty, ErrorBox, Header, Loading, s } from '../../components/ui';
 import MedicineIcon from '../../components/MedicineIcon';
+import { PhotoViewer, ProfilePic } from '../../components/Photo';
 import PharmacyMap from '../../components/PharmacyMap';
 import { api, type MedicineSummary, type PharmacySummary } from '../../lib/api';
 import { useApi, useSession } from '../../lib/session';
@@ -15,7 +16,7 @@ type Resp = {
   medicine: MedicineSummary & { description: string | null };
   available: boolean;
   cheapest: number | null;
-  pharmacies: { inventoryId: number; price: number; stock: string; stockUpdatedAt: string; pharmacy: PharmacySummary }[];
+  pharmacies: { inventoryId: number; price: number; stock: string; stockUpdatedAt: string; pharmacy: PharmacySummary; imageId?: number | null }[];
 };
 
 /** Compare every pharmacy that stocks this medicine (activity diagram: "Compare & route"). */
@@ -25,6 +26,7 @@ export default function MedicineScreen() {
   const { q, coords, addToCart, cart, features } = useSession();
   const [sort, setSort] = useState<'distance' | 'price'>('distance');
   const [alertSet, setAlertSet] = useState(false);
+  const [viewing, setViewing] = useState<{ id: number; title: string } | null>(null);
   const { data, loading, error } = useApi<Resp>(`/medicines/${id}/pharmacies?${q}&sort=${sort}`, [id, q, sort]);
 
   const notify = async () => {
@@ -34,7 +36,7 @@ export default function MedicineScreen() {
   const add = (row: Resp['pharmacies'][number]) => {
     const m = data!.medicine;
     const doAdd = () => {
-      addToCart(row.pharmacy, { medicineId: m.id, name: m.name, strength: m.strength, price: row.price });
+      addToCart(row.pharmacy, { medicineId: m.id, name: m.name, strength: m.strength, price: row.price, imageId: row.imageId ?? m.imageId });
       router.push('/checkout');
     };
     if (cart && cart.pharmacy.id !== row.pharmacy.id) {
@@ -51,7 +53,9 @@ export default function MedicineScreen() {
       {loading && !data ? <Loading /> : error ? <View style={s.pad}><ErrorBox text={error} /></View> : data && (
         <ScrollView contentContainerStyle={[s.pad, { paddingBottom: 40 }]}>
           <Card style={[s.row, { gap: 14 }]}>
-            <MedicineIcon name={data.medicine.name} size={54} />
+            <Pressable onPress={() => data.medicine.imageId && setViewing({ id: data.medicine.imageId, title: `${data.medicine.name} ${data.medicine.strength}` })}>
+              <MedicineIcon name={data.medicine.name} imageId={data.medicine.imageId} size={72} />
+            </Pressable>
             <View style={{ flex: 1, gap: 3 }}>
               <Text style={s.h2}>{data.medicine.name}</Text>
               <Text style={s.muted}>{[data.medicine.strength, data.medicine.form, data.medicine.category].filter(Boolean).join(' · ')}</Text>
@@ -91,6 +95,7 @@ export default function MedicineScreen() {
             return (
               <Card key={row.inventoryId} style={[{ gap: 10 }, out && { opacity: 0.6 }]}>
                 <Pressable onPress={() => router.push(`/pharmacy/${row.pharmacy.id}`)} style={s.rowBetween}>
+                  <ProfilePic imageId={row.pharmacy.logoImageId} label={row.pharmacy.name} size={42} round={false} icon="storefront" />
                   <View style={{ flex: 1, gap: 2 }}>
                     <Text style={s.h3}>{row.pharmacy.name}</Text>
                     <Text style={s.muted}>{[row.pharmacy.area, row.pharmacy.city].filter(Boolean).join(', ')} · {km(row.pharmacy.distanceKm)}</Text>
@@ -101,6 +106,12 @@ export default function MedicineScreen() {
                     {idx === 0 && sort === 'distance' && !out && !best && <Text style={{ fontSize: 11, color: colors.blue, fontWeight: '700' }}>NEAREST</Text>}
                   </View>
                 </Pressable>
+                {row.imageId && row.imageId !== data.medicine.imageId && (
+                  <Pressable onPress={() => setViewing({ id: row.imageId!, title: `${data.medicine.name} at ${row.pharmacy.name}` })} style={[s.row, { gap: 8 }]}>
+                    <MedicineIcon name={data.medicine.name} imageId={row.imageId} size={48} />
+                    <Text style={[s.muted, { fontSize: 12 }]}>Their pack · tap to enlarge</Text>
+                  </Pressable>
+                )}
                 <View style={[s.row, { flexWrap: 'wrap' }]}>
                   <Badge label={row.stock} />
                   {row.pharmacy.offersDelivery ? <Badge label={`Delivery ${money(row.pharmacy.deliveryFee)}`} tone="blue" /> : <Badge label="Pickup only" tone="grey" />}
@@ -117,6 +128,7 @@ export default function MedicineScreen() {
           })}
         </ScrollView>
       )}
+      <PhotoViewer imageId={viewing?.id ?? null} title={viewing?.title} onClose={() => setViewing(null)} />
     </SafeAreaView>
   );
 }

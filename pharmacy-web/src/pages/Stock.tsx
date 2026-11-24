@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Badge, Button, Empty, Field, Icon, Modal, Spinner, money, timeAgo, useLoad, useToast } from '@medfinder/web-shared';
+import { Badge, Button, Empty, Field, Icon, Modal, PhotoPicker, Spinner, Thumb, imageUrl, money, timeAgo, useLoad, useToast } from '@medfinder/web-shared';
 import { api, type InventoryItem } from '../api';
 import { useAuth } from '../auth';
 
@@ -19,6 +19,16 @@ export default function Stock() {
       const r = await api.patch(`/pharmacy/inventory/${item.id}`, patch);
       setData((d) => d && { items: d.items.map((i) => (i.id === item.id ? r.item : i)) });
       toast(`${item.name} updated`);
+    } catch (e: any) { toast(e.message, 'err'); }
+  };
+  const uploadPhoto = async (item: InventoryItem, file?: File | null) => {
+    if (!file) return;
+    const fd = new FormData();
+    fd.append('image', file);
+    try {
+      const r = await api.post(`/pharmacy/inventory/${item.id}/image`, fd);
+      setData((d) => d && { items: d.items.map((i) => (i.id === item.id ? r.item : i)) });
+      toast(`Photo added to ${item.name}`);
     } catch (e: any) { toast(e.message, 'err'); }
   };
   const remove = async (item: InventoryItem) => {
@@ -43,7 +53,7 @@ export default function Stock() {
         </div>
       </div>
       <p className="muted small">
-        Patients see these prices and stock levels. Last updated {timeAgo(pharmacy?.lastSyncAt)}. Change price or quantity directly in the table and press Enter.
+        Patients see these prices, stock levels and photos. Last updated {timeAgo(pharmacy?.lastSyncAt)}. Change price or quantity directly in the table and press Enter. Click a picture to add a photo of the pack you sell.
       </p>
       <div className="card flush">
         {loading && !data ? <Spinner /> : !data?.items.length ? (
@@ -53,10 +63,17 @@ export default function Stock() {
         ) : (
           <div className="table-wrap">
             <table className="table">
-              <thead><tr><th>Medicine</th><th>Category</th><th>Price (GH₵)</th><th>Quantity</th><th>Status</th><th>Updated</th><th /></tr></thead>
+              <thead><tr><th style={{ width: 64 }}>Photo</th><th>Medicine</th><th>Category</th><th>Price (GH₵)</th><th>Quantity</th><th>Status</th><th>Updated</th><th /></tr></thead>
               <tbody>
                 {data.items.map((i) => (
                   <tr key={i.id}>
+                    <td>
+                      <label title={i.imageId ? 'Change photo' : 'Add a photo of this medicine'} style={{ cursor: 'pointer', display: 'inline-block', position: 'relative' }}>
+                        <Thumb src={imageUrl(i.imageId ?? i.catalogueImageId)} label={i.name} size={44} />
+                        {!i.imageId && <span style={{ position: 'absolute', right: -4, bottom: -4, width: 20, height: 20, borderRadius: '50%', background: 'var(--green2)', color: '#fff', display: 'grid', placeItems: 'center', border: '2px solid #fff' }}><Icon name="plus" size={12} /></span>}
+                        <input type="file" accept="image/*" hidden onChange={(e) => { uploadPhoto(i, e.target.files?.[0]); e.target.value = ''; }} />
+                      </label>
+                    </td>
                     <td><strong>{i.name}</strong> <span className="muted">{i.strength}</span>{i.requiresPrescription && <span className="badge badge-blue" style={{ marginLeft: 6 }}>Rx</span>}<div className="muted small">{i.form}</div></td>
                     <td className="muted">{i.category || '—'}</td>
                     <td><InlineNumber key={`p${i.id}-${i.price}`} value={i.price} step="0.5" onSave={(v) => quickSave(i, { price: v })} /></td>
@@ -76,7 +93,7 @@ export default function Stock() {
           </div>
         )}
       </div>
-      {editing && <ItemModal item={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); reload(); }} />}
+      {editing && <ItemModal item={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); reload(); }} onChanged={reload} />}
     </>
   );
 }
@@ -87,8 +104,10 @@ function InlineNumber({ value, step, onSave }: { value: number; step: string; on
   return <input className="input" type="number" min="0" step={step} value={v} onChange={(e) => setV(e.target.value)} onBlur={commit} onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />;
 }
 
-function ItemModal({ item, onClose, onSaved }: { item: InventoryItem | null; onClose: () => void; onSaved: () => void }) {
+function ItemModal({ item, onClose, onSaved, onChanged }: { item: InventoryItem | null; onClose: () => void; onSaved: () => void; onChanged: () => void }) {
   const toast = useToast();
+  const [current, setCurrent] = useState<InventoryItem | null>(item);
+  const [newPhoto, setNewPhoto] = useState<File | null>(null);
   const [f, setF] = useState<any>(item ?? { name: '', strength: '', form: '', category: '', price: '', quantity: '', lowStockThreshold: 10, requiresPrescription: false });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -97,7 +116,13 @@ function ItemModal({ item, onClose, onSaved }: { item: InventoryItem | null; onC
     setBusy(true); setError('');
     try {
       if (item) await api.patch(`/pharmacy/inventory/${item.id}`, { price: f.price, quantity: f.quantity, lowStockThreshold: f.lowStockThreshold, sku: f.sku || undefined });
-      else await api.post('/pharmacy/inventory', f);
+      else {
+        const r = await api.post('/pharmacy/inventory', f);
+        if (newPhoto) {
+          const fd = new FormData(); fd.append('image', newPhoto);
+          await api.post(`/pharmacy/inventory/${r.item.id}/image`, fd).catch((e) => toast(`Saved, but the photo failed: ${e.message}`, 'err'));
+        }
+      }
       toast(item ? 'Saved' : `${f.name} added to your stock`);
       onSaved();
     } catch (e: any) { setError(e.message); } finally { setBusy(false); }
@@ -118,6 +143,26 @@ function ItemModal({ item, onClose, onSaved }: { item: InventoryItem | null; onC
             <label className="check"><input type="checkbox" checked={f.requiresPrescription} onChange={set('requiresPrescription')} /> Prescription only</label>
           </>
         )}
+        <Field label="Photo of the medicine" hint="Show patients the exact pack you sell. Clear photo on a plain background.">
+          {current ? (
+            <PhotoPicker
+              src={imageUrl(current.imageId ?? current.catalogueImageId)}
+              label={current.name}
+              size={88}
+              hint={!current.imageId && current.catalogueImageId ? 'Showing the default MedFinder photo. Upload your own pack photo.' : undefined}
+              onUpload={async (file) => { const fd = new FormData(); fd.append('image', file); const r = await api.post(`/pharmacy/inventory/${current.id}/image`, fd); setCurrent(r.item); onChanged(); }}
+              onRemove={current.imageId ? async () => { const r = await api.del(`/pharmacy/inventory/${current.id}/image`); setCurrent(r.item); onChanged(); } : undefined}
+            />
+          ) : (
+            <div className="row">
+              {newPhoto && <img src={URL.createObjectURL(newPhoto)} alt="" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 12, border: '1px solid var(--line)' }} />}
+              <label className="btn btn-secondary btn-sm" style={{ cursor: 'pointer' }}>
+                <Icon name="upload" size={16} /> {newPhoto ? 'Choose another photo' : 'Choose photo (optional)'}
+                <input type="file" accept="image/*" hidden onChange={(e) => setNewPhoto(e.target.files?.[0] || null)} />
+              </label>
+            </div>
+          )}
+        </Field>
         <div className="grid-3">
           <Field label="Price (GH₵)"><input type="number" min="0" step="0.5" value={f.price} onChange={set('price')} /></Field>
           <Field label="Quantity in stock"><input type="number" min="0" value={f.quantity} onChange={set('quantity')} /></Field>

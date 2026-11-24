@@ -48,7 +48,26 @@ async function request<T = any>(method: string, path: string, body?: unknown): P
   return json as T;
 }
 
+/** URL of a stored picture (pharmacy logo, patient photo, medicine photo). */
+export const imageUrl = (id?: number | null) => (id ? `${API_URL}/images/${id}` : null);
+
+/** Upload a picked photo. On phones we send the file URI; on the web build, the File itself. */
+async function uploadImage<T = any>(path: string, asset: { uri: string; file?: File | null; mimeType?: string | null; fileName?: string | null }): Promise<T> {
+  const fd = new FormData();
+  if (asset.file) fd.append('image', asset.file);
+  else fd.append('image', { uri: asset.uri, name: asset.fileName || 'photo.jpg', type: asset.mimeType || 'image/jpeg' } as any);
+  const headers: Record<string, string> = { Accept: 'application/json' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  let res: Response;
+  try { res = await fetch(API_URL + path, { method: 'POST', headers, body: fd }); }
+  catch { throw new ApiError(0, 'Cannot reach MedFinder. Check your internet connection and try again.'); }
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(res.status, json.error || 'Upload failed');
+  return json as T;
+}
+
 export const api = {
+  upload: uploadImage,
   get: <T = any>(p: string) => request<T>('GET', p),
   post: <T = any>(p: string, b: unknown = {}) => request<T>('POST', p, b),
   patch: <T = any>(p: string, b: unknown = {}) => request<T>('PATCH', p, b),
@@ -59,25 +78,25 @@ export const api = {
 // ----- Types -----
 export type Patient = {
   id: number; firstName: string; lastName: string; phone: string; email: string | null; age: number | null;
-  address: string | null; lat: number | null; lng: number | null; phoneVerified: boolean; createdAt: string;
+  address: string | null; lat: number | null; lng: number | null; phoneVerified: boolean; createdAt: string; avatarImageId: number | null;
 };
 export type PharmacySummary = {
   id: number; name: string; address: string; area: string | null; city: string; region: string; phone: string; whatsapp: string | null;
   lat: number | null; lng: number | null; bio: string | null; openingHours: string | null; offersDelivery: boolean; deliveryFee: number;
-  distanceKm: number | null;
+  distanceKm: number | null; logoImageId: number | null;
 };
 export type MedicineSummary = {
   id: number; name: string; strength: string; form: string | null; category: string | null;
-  pharmacies?: number; minPrice?: number | null; requiresPrescription?: boolean;
+  pharmacies?: number; minPrice?: number | null; requiresPrescription?: boolean; imageId?: number | null;
 };
 export type StockLine = {
-  inventoryId: number; medicine: MedicineSummary; price: number; stock: 'Available' | 'Low stock' | 'Out of stock'; updatedAt?: string;
+  inventoryId: number; medicine: MedicineSummary; price: number; stock: 'Available' | 'Low stock' | 'Out of stock'; updatedAt?: string; imageId?: number | null;
 };
 export type Order = {
   id: number; code: string; status: string; statusText: string; method: 'pickup' | 'delivery'; deliveryAddress: string | null;
   paymentMethod: string; paymentStatus: string; subtotal: number; deliveryFee: number; total: number; note: string | null; pharmacyNote: string | null;
   createdAt: string; updatedAt: string; canCancel: boolean;
-  items: { medicineId: number; name: string; strength: string; unitPrice: number; quantity: number }[];
+  items: { medicineId: number; name: string; strength: string; unitPrice: number; quantity: number; imageId?: number | null }[];
   timeline: { status: string; statusText: string; note: string | null; at: string }[];
-  pharmacy: { id: number; name: string; phone: string; address: string; area: string | null; lat: number | null; lng: number | null };
+  pharmacy: { id: number; name: string; phone: string; address: string; area: string | null; lat: number | null; lng: number | null; logoImageId?: number | null };
 };

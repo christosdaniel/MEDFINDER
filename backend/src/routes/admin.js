@@ -8,6 +8,7 @@ import { notify } from '../lib/notify.js';
 import { pharmacyProfile } from './pharmacy.js';
 import { patientProfile } from './patient.js';
 import { loadOrder, serializeOrder } from './orders-common.js';
+import { imageUpload, saveImage } from '../lib/images.js';
 
 const r = Router();
 
@@ -69,7 +70,7 @@ r.get('/pharmacies', (req, res) => {
 r.get('/pharmacies/:id', (req, res) => {
   const p = db.prepare('SELECT * FROM pharmacies WHERE id = ?').get(Number(req.params.id));
   if (!p) throw notFound('Pharmacy not found');
-  const stock = db.prepare(`SELECT i.id, m.name, m.strength, i.price, i.quantity, i.updated_at AS updatedAt FROM inventory i JOIN medicines m ON m.id = i.medicine_id WHERE i.pharmacy_id = ? ORDER BY m.name`).all(p.id);
+  const stock = db.prepare(`SELECT i.id, m.name, m.strength, i.price, i.quantity, i.updated_at AS updatedAt, COALESCE(i.image_id, m.image_id) AS imageId FROM inventory i JOIN medicines m ON m.id = i.medicine_id WHERE i.pharmacy_id = ? ORDER BY m.name`).all(p.id);
   const complaints = db.prepare(`SELECT id, subject, status, created_at AS createdAt FROM complaints WHERE pharmacy_id = ? ORDER BY id DESC`).all(p.id);
   const imports = db.prepare(`SELECT source, filename, rows_total AS rowsTotal, created_at AS createdAt FROM import_logs WHERE pharmacy_id = ? ORDER BY id DESC LIMIT 10`).all(p.id);
   const orderStats = db.prepare(`SELECT status, COUNT(*) AS n FROM orders WHERE pharmacy_id = ? GROUP BY status`).all(p.id);
@@ -235,7 +236,7 @@ r.patch('/settings', (req, res) => {
 r.get('/medicines', (req, res) => {
   const q = String(req.query.q || '').trim();
   res.json({ medicines: db.prepare(`SELECT m.*, (SELECT COUNT(*) FROM inventory i WHERE i.medicine_id = m.id) AS listings FROM medicines m WHERE (? = '' OR m.name LIKE ?) ORDER BY m.name LIMIT 500`).all(q, `%${q}%`)
-    .map((m) => ({ id: m.id, name: m.name, strength: m.strength, form: m.form, category: m.category, requiresPrescription: !!m.requires_prescription, description: m.description, listings: m.listings })) });
+    .map((m) => ({ id: m.id, name: m.name, strength: m.strength, form: m.form, category: m.category, requiresPrescription: !!m.requires_prescription, description: m.description, listings: m.listings, imageId: m.image_id ?? null })) });
 });
 r.patch('/medicines/:id', (req, res) => {
   const v = validate(req.body, { name: { max: 120 }, strength: { max: 60 }, form: { max: 60 }, category: { max: 60 }, description: { max: 1000 }, requiresPrescription: { type: 'boolean' } });
@@ -244,6 +245,16 @@ r.patch('/medicines/:id', (req, res) => {
     .run(v.name ?? null, v.strength ?? null, v.form ?? null, v.category ?? null, v.description ?? null, v.requiresPrescription === undefined ? null : v.requiresPrescription ? 1 : 0, Number(req.params.id));
   audit(req, 'medicine.update', `medicine:${req.params.id}`, v);
   res.json({ ok: true });
+});
+
+/** Set the default (catalogue) photo of a medicine, shown wherever a pharmacy hasn't added its own. */
+r.post('/medicines/:id/image', imageUpload.single('image'), async (req, res) => {
+  const m = db.prepare('SELECT * FROM medicines WHERE id = ?').get(Number(req.params.id));
+  if (!m) throw notFound('Medicine not found');
+  const id = await saveImage(req.file, 'medicine', m.id, { preset: 'product', oldId: m.image_id });
+  db.prepare('UPDATE medicines SET image_id = ? WHERE id = ?').run(id, m.id);
+  audit(req, 'medicine.image', `medicine:${m.id}`);
+  res.json({ imageId: id });
 });
 
 // ---------- Admin users & audit ----------

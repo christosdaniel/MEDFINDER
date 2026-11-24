@@ -23,7 +23,8 @@ Design references: [use case diagram](docs/diagrams/use_case_diagram.drawio), [a
 - **Home**: medicines and prices at pharmacies near you, nearby pharmacies (sorted by distance using GPS), popular medicines with "from" prices, other pharmacies, and admin announcements.
 - **Search** medicines (or pharmacies by name/area), with recent and popular searches.
 - **Compare** every pharmacy that stocks a medicine: price, stock level (Available / Low / Out), distance, delivery fee, and a map. Sort by nearest or cheapest.
-- **Pharmacy page**: bio, address, opening hours, phone/WhatsApp, map, directions, and the full list of medicines with prices and stock.
+- **Pharmacy page**: profile picture, bio, address, opening hours, phone/WhatsApp, map, directions, and the full list of medicines with photos, prices and stock (tap a photo to enlarge).
+- **Profile picture**: take a photo or pick one from the gallery.
 - **Order** from one pharmacy: pickup or delivery, cash or Mobile Money, notes.
 - **Track orders** live: placed → accepted → preparing → ready / on the way → completed. Cancel while still pending.
 - **Restock alerts**: "Notify me when available" when no pharmacy has a medicine.
@@ -32,7 +33,8 @@ Design references: [use case diagram](docs/diagrams/use_case_diagram.drawio), [a
 ### Pharmacy web app
 - **Register** the pharmacy (licence, contact, address, map pin from GPS or coordinates, bio, opening hours, delivery fee). It goes live after admin approval.
 - **Dashboard**: new orders, today's sales, low stock, orders this week, and medicines patients are looking for.
-- **Stock & prices**: add medicines, edit price and quantity in place, low-stock thresholds.
+- **Stock & prices**: add medicines, edit price and quantity in place, low-stock thresholds, and a **photo of each medicine** (the pack the pharmacy sells). The first photo of a medicine also becomes its default picture for patients.
+- **Profile picture** (logo or shopfront) so patients recognise the pharmacy.
 - **Link your database**:
   - Upload **Excel (.xlsx), CSV, or Microsoft Access (.mdb / .accdb)**. Columns are detected automatically (e.g. "Drug Name", "Selling Price", "Qty on hand") with a preview and manual column mapping. Choose *update listed medicines* or *full stock take*.
   - **Automatic sync**: run the Stock Sync agent on the pharmacy computer. It watches the stock file and uploads it every time it is saved, using a private sync key.
@@ -45,7 +47,7 @@ Design references: [use case diagram](docs/diagrams/use_case_diagram.drawio), [a
 - **Patients** (suspend / reactivate), **orders** across the platform.
 - **Complaints**: investigate, warn the pharmacy, resolve (patient is notified).
 - **App control**: switch features on or off for the patient app and pharmacy portal (delivery, Mobile Money, restock alerts, stock import, sync agent, maintenance mode...), add new feature switches, and publish announcements. No app update needed.
-- Medicine catalogue clean-up, system settings (subscription price, trial days, support phone, minimum app version), admin accounts and an audit log.
+- Medicine catalogue clean-up and default medicine photos, system settings (subscription price, trial days, support phone, minimum app version), admin accounts and an audit log.
 
 ---
 

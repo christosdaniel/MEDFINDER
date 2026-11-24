@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, Empty, Field, Icon, Modal, Spinner, useLoad, useToast } from '@medfinder/web-shared';
+import { Button, Empty, Field, Icon, Modal, PhotoPicker, Spinner, Thumb, imageUrl, useLoad, useToast } from '@medfinder/web-shared';
 import { api } from '../api';
 
 export default function Medicines() {
@@ -15,9 +15,10 @@ export default function Medicines() {
       <div className="card flush">
         {loading && !data ? <Spinner /> : !data.medicines.length ? <Empty icon="pill" title="No medicines" /> : (
           <div className="table-wrap"><table className="table">
-            <thead><tr><th>Name</th><th>Strength</th><th>Form</th><th>Category</th><th>Rx</th><th className="num">Pharmacies listing</th><th /></tr></thead>
+            <thead><tr><th style={{ width: 56 }}>Photo</th><th>Name</th><th>Strength</th><th>Form</th><th>Category</th><th>Rx</th><th className="num">Pharmacies listing</th><th /></tr></thead>
             <tbody>{data.medicines.map((m: any) => (
               <tr key={m.id}>
+                <td><Thumb src={imageUrl(m.imageId)} label={m.name} size={36} /></td>
                 <td><strong>{m.name}</strong></td><td>{m.strength}</td><td className="muted">{m.form || '—'}</td><td className="muted">{m.category || '—'}</td>
                 <td>{m.requiresPrescription ? 'Yes' : '—'}</td><td className="num">{m.listings}</td>
                 <td><button className="icon-btn" onClick={() => setEdit(m)}><Icon name="edit" size={18} /></button></td>
@@ -26,7 +27,7 @@ export default function Medicines() {
           </table></div>
         )}
       </div>
-      {edit && <EditMedicine m={edit} onClose={() => setEdit(null)} onDone={() => { setEdit(null); reload(); }} />}
+      {edit && <EditMedicine m={edit} onClose={() => { setEdit(null); reload(); }} onDone={() => { setEdit(null); reload(); }} />}
     </>
   );
 }
@@ -42,6 +43,10 @@ function EditMedicine({ m, onClose, onDone }: { m: any; onClose: () => void; onD
   return (
     <Modal title={`Edit ${m.name}`} onClose={onClose}>
       <div className="stack">
+        <Field label="Default photo" hint="Shown to patients wherever a pharmacy hasn't added its own photo of this medicine.">
+          <PhotoPicker src={imageUrl(f.imageId)} label={m.name} size={88}
+            onUpload={async (file) => { const fd = new FormData(); fd.append('image', file); const r = await api.post(`/admin/medicines/${m.id}/image`, fd); setF({ ...f, imageId: r.imageId }); toast('Photo updated'); }} />
+        </Field>
         <div className="grid-2">
           <Field label="Name"><input value={f.name} onChange={set('name')} /></Field>
           <Field label="Strength"><input value={f.strength} onChange={set('strength')} /></Field>

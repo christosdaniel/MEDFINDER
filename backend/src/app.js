@@ -30,7 +30,7 @@ export function createApp() {
 
   // eslint-disable-next-line no-unused-vars
   app.use((err, _req, res, _next) => {
-    if (err?.code === 'LIMIT_FILE_SIZE') err = new HttpError(400, 'File is too large (max 25 MB)');
+    if (err?.code === 'LIMIT_FILE_SIZE') err = new HttpError(400, 'File is too large. Photos can be up to 10 MB and stock files up to 25 MB.');
     if (err?.type === 'entity.parse.failed') err = new HttpError(400, 'Invalid JSON body');
     const status = err instanceof HttpError ? err.status : 500;
     if (status === 500) console.error(err);

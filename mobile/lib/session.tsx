@@ -5,7 +5,7 @@ import * as Location from 'expo-location';
 import { api, auth, type Patient, type PharmacySummary } from './api';
 import { getItem, setItem } from './storage';
 
-export type CartItem = { medicineId: number; name: string; strength: string; price: number; quantity: number };
+export type CartItem = { medicineId: number; name: string; strength: string; price: number; quantity: number; imageId?: number | null };
 export type Cart = { pharmacy: PharmacySummary; items: CartItem[] } | null;
 type Coords = { lat: number; lng: number; source: 'gps' | 'profile' | 'default' };
 

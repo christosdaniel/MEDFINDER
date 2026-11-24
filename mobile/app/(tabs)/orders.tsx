@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Badge, Button, Card, Empty, ErrorBox, Loading, s } from '../../components/ui';
+import { ProfilePic } from '../../components/Photo';
 import type { Order } from '../../lib/api';
 import { useApi } from '../../lib/session';
 import { colors, money, timeAgo } from '../../lib/theme';
@@ -32,7 +33,7 @@ export default function Orders() {
         renderItem={({ item }) => typeof item === 'string' ? <Text style={[s.h3, { marginTop: 8 }]}>{item}</Text> : (
           <Card onPress={() => router.push(`/order/${item.id}`)} style={{ gap: 10 }}>
             <View style={s.rowBetween}>
-              <Text style={s.h3}>{item.pharmacy.name}</Text>
+              <View style={[s.row, { flex: 1 }]}><ProfilePic imageId={item.pharmacy.logoImageId} label={item.pharmacy.name} size={36} round={false} icon="storefront" /><Text style={[s.h3, { flex: 1 }]} numberOfLines={1}>{item.pharmacy.name}</Text></View>
               <Badge label={item.statusText} tone={item.status === 'completed' ? 'green' : ['cancelled', 'rejected'].includes(item.status) ? 'red' : item.status === 'pending' ? 'amber' : 'blue'} />
             </View>
             <Text style={s.muted} numberOfLines={2}>{item.items.map((i) => `${i.name} ${i.strength} ×${i.quantity}`).join(', ')}</Text>

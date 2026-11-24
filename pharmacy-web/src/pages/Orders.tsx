@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Badge, Button, Empty, Field, Icon, Spinner, fmtDateTime, money, timeAgo, useLoad, useToast } from '@medfinder/web-shared';
+import { Badge, Button, Empty, Field, Icon, Spinner, Thumb, fmtDateTime, imageUrl, money, timeAgo, useLoad, useToast } from '@medfinder/web-shared';
 import { api, type Order } from '../api';
 import { useAuth } from '../auth';
 
@@ -47,7 +47,7 @@ export default function Orders() {
                 {data.orders.map((o) => (
                   <tr key={o.id} className="clickable" onClick={() => nav(`/orders/${o.id}`)}>
                     <td><strong>{o.code}</strong><div className="muted small">{timeAgo(o.createdAt)}</div></td>
-                    <td>{o.patient.name}<div className="muted small">{o.patient.phone}</div></td>
+                    <td><span className="row" style={{ gap: 10 }}><Thumb src={imageUrl(o.patient.avatarImageId)} label={o.patient.name} size={32} round /><span>{o.patient.name}<div className="muted small">{o.patient.phone}</div></span></span></td>
                     <td>{o.items.map((i) => `${i.name} ×${i.quantity}`).join(', ')}</td>
                     <td><span className="row" style={{ gap: 6 }}><Icon name={o.method === 'delivery' ? 'truck' : 'bag'} size={16} /><span style={{ textTransform: 'capitalize' }}>{o.method}</span></span></td>
                     <td className="num">{money(o.total)}</td>
@@ -109,8 +109,8 @@ function OrderDrawer({ id, onClose, onChanged }: { id: number; onClose: () => vo
             <div className="row-between"><Badge>{o.status}</Badge><span className="muted small">{o.statusText}</span></div>
 
             <div className="card" style={{ padding: 16 }}>
-              <h3>Patient details</h3>
-              <dl className="kv mt-s">
+              <div className="row"><Thumb src={imageUrl(o.patient.avatarImageId)} label={o.patient.name} size={52} round /><div><h3>{o.patient.name}</h3><p className="muted small">Patient</p></div></div>
+              <dl className="kv mt">
                 <dt>Name</dt><dd>{o.patient.name}</dd>
                 <dt>Phone</dt><dd><a href={`tel:${o.patient.phone}`}>{o.patient.phone}</a></dd>
                 {o.patient.email && (<><dt>Email</dt><dd>{o.patient.email}</dd></>)}
@@ -140,7 +140,7 @@ function OrderDrawer({ id, onClose, onChanged }: { id: number; onClose: () => vo
             <div>
               <h3>Medicines</h3>
               {o.items.map((i) => (
-                <div className="item-line" key={i.medicineId}><span>{i.name} {i.strength} <span className="muted">× {i.quantity}</span></span><span>{money(i.unitPrice * i.quantity)}</span></div>
+                <div className="item-line" key={i.medicineId} style={{ alignItems: 'center' }}><span className="row" style={{ gap: 10 }}><Thumb src={imageUrl(i.imageId)} label={i.name} size={36} />{i.name} {i.strength} <span className="muted">× {i.quantity}</span></span><span>{money(i.unitPrice * i.quantity)}</span></div>
               ))}
               {o.deliveryFee > 0 && <div className="item-line"><span className="muted">Delivery fee</span><span>{money(o.deliveryFee)}</span></div>}
               <div className="total-line"><span>Total to collect</span><span>{money(o.total)}</span></div>

@@ -9,6 +9,7 @@ import { validate, normalizePhone, PHONE_RE, EMAIL_RE, bad, notFound, forbidden,
 import { notify, fireRestockAlerts, lowStockCheck } from '../lib/notify.js';
 import { readStockFile, detectMapping, normaliseRows, applyStock, upsertMedicine, COLUMN_ALIASES } from '../lib/stockImport.js';
 import { loadOrder, serializeOrder, nextStatuses, ORDER_STATUS_TEXT } from './orders-common.js';
+import { imageUpload, saveImage, copyImage, deleteImage } from '../lib/images.js';
 import { stockLabel } from './public.js';
 
 const r = Router();
@@ -42,6 +43,7 @@ export function pharmacyProfile(p) {
     lastSyncAt: p.last_sync_at,
     createdAt: p.created_at,
     approvedAt: p.approved_at,
+    logoImageId: p.logo_image_id ?? null,
   };
 }
 
@@ -148,6 +150,20 @@ r.patch('/me', (req, res) => {
   res.json({ pharmacy: pharmacyProfile(me(req)), reReview: !!sensitive });
 });
 
+// ---------- Profile picture (logo / shopfront) ----------
+r.post('/me/logo', imageUpload.single('image'), async (req, res) => {
+  const p = me(req);
+  const id = await saveImage(req.file, 'pharmacy_logo', p.id, { preset: 'square', oldId: p.logo_image_id });
+  db.prepare('UPDATE pharmacies SET logo_image_id = ? WHERE id = ?').run(id, p.id);
+  res.json({ pharmacy: pharmacyProfile(me(req)) });
+});
+r.delete('/me/logo', (req, res) => {
+  const p = me(req);
+  deleteImage(p.logo_image_id);
+  db.prepare('UPDATE pharmacies SET logo_image_id = NULL WHERE id = ?').run(p.id);
+  res.json({ pharmacy: pharmacyProfile(me(req)) });
+});
+
 r.post('/me/password', async (req, res) => {
   const v = validate(req.body, { currentPassword: { required: true }, newPassword: { required: true, min: 8, max: 100 } });
   const p = me(req);
@@ -182,9 +198,10 @@ function invRow(i) {
     id: i.id, medicineId: i.medicine_id, name: i.name, strength: i.strength, form: i.form, category: i.category,
     requiresPrescription: !!i.requires_prescription, price: i.price, quantity: i.quantity, lowStockThreshold: i.low_stock_threshold,
     sku: i.sku, stock: stockLabel(i.quantity, i.low_stock_threshold), updatedAt: i.updated_at,
+    imageId: i.image_id ?? null, catalogueImageId: i.medicine_image_id ?? null,
   };
 }
-const INV_SELECT = `SELECT i.*, m.name, m.strength, m.form, m.category, m.requires_prescription FROM inventory i JOIN medicines m ON m.id = i.medicine_id`;
+const INV_SELECT = `SELECT i.*, m.name, m.strength, m.form, m.category, m.requires_prescription, m.image_id AS medicine_image_id FROM inventory i JOIN medicines m ON m.id = i.medicine_id`;
 
 r.get('/inventory', (req, res) => {
   const q = String(req.query.q || '').trim();
@@ -244,9 +261,30 @@ r.patch('/inventory/:id', (req, res) => {
 });
 
 r.delete('/inventory/:id', (req, res) => {
-  const out = db.prepare('DELETE FROM inventory WHERE id = ? AND pharmacy_id = ?').run(Number(req.params.id), req.user.id);
-  if (!out.changes) throw notFound('Item not found');
+  const item = db.prepare('SELECT * FROM inventory WHERE id = ? AND pharmacy_id = ?').get(Number(req.params.id), req.user.id);
+  if (!item) throw notFound('Item not found');
+  db.prepare('DELETE FROM inventory WHERE id = ?').run(item.id);
+  deleteImage(item.image_id);
   res.json({ ok: true });
+});
+
+/** Photo of how this medicine looks at this pharmacy (the pack they sell). */
+r.post('/inventory/:id/image', imageUpload.single('image'), async (req, res) => {
+  const item = db.prepare('SELECT * FROM inventory WHERE id = ? AND pharmacy_id = ?').get(Number(req.params.id), req.user.id);
+  if (!item) throw notFound('Item not found');
+  const id = await saveImage(req.file, 'inventory', item.id, { preset: 'product', oldId: item.image_id });
+  db.prepare(`UPDATE inventory SET image_id = ?, updated_at = datetime('now') WHERE id = ?`).run(id, item.id);
+  // First photo of a medicine also becomes its default picture across MedFinder.
+  const med = db.prepare('SELECT image_id FROM medicines WHERE id = ?').get(item.medicine_id);
+  if (!med.image_id) db.prepare('UPDATE medicines SET image_id = ? WHERE id = ?').run(copyImage(id, 'medicine', item.medicine_id), item.medicine_id);
+  res.json({ item: invRow(db.prepare(`${INV_SELECT} WHERE i.id = ?`).get(item.id)) });
+});
+r.delete('/inventory/:id/image', (req, res) => {
+  const item = db.prepare('SELECT * FROM inventory WHERE id = ? AND pharmacy_id = ?').get(Number(req.params.id), req.user.id);
+  if (!item) throw notFound('Item not found');
+  deleteImage(item.image_id);
+  db.prepare('UPDATE inventory SET image_id = NULL WHERE id = ?').run(item.id);
+  res.json({ item: invRow(db.prepare(`${INV_SELECT} WHERE i.id = ?`).get(item.id)) });
 });
 
 /** CSV template pharmacies can fill in. */

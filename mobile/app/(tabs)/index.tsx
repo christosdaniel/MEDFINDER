@@ -6,6 +6,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { Badge, Card, ErrorBox, Loading, Section, s } from '../../components/ui';
 import MedicineIcon from '../../components/MedicineIcon';
 import PharmacyRow from '../../components/PharmacyRow';
+import { ProfilePic } from '../../components/Photo';
 import { api, type MedicineSummary, type PharmacySummary, type StockLine } from '../../lib/api';
 import { useApi, useSession } from '../../lib/session';
 import { colors, km, money } from '../../lib/theme';
@@ -34,6 +35,9 @@ export default function HomeScreen() {
     <SafeAreaView style={s.screen} edges={['top']}>
       <ScrollView contentContainerStyle={[s.pad, { paddingBottom: 40 }]} refreshControl={<RefreshControl refreshing={loading && !!data} onRefresh={reload} tintColor={colors.green} />}>
         <View style={s.rowBetween}>
+          <Pressable onPress={() => router.push('/(tabs)/profile')}>
+            <ProfilePic imageId={patient?.avatarImageId} label={patient?.firstName || '?'} size={48} />
+          </Pressable>
           <View style={{ flex: 1 }}>
             <Text style={s.muted}>{greet},</Text>
             <Text style={s.h1}>{patient?.firstName}</Text>
@@ -77,7 +81,7 @@ export default function HomeScreen() {
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingRight: 6 }}>
                   {data.offers.map((o) => (
                     <Card key={o.inventoryId} style={{ width: 170, gap: 8 }} onPress={() => router.push(`/medicine/${o.medicine.id}`)}>
-                      <MedicineIcon name={o.medicine.name} size={40} />
+                      <MedicineIcon name={o.medicine.name} imageId={o.imageId} size={64} />
                       <View><Text style={s.h3} numberOfLines={1}>{o.medicine.name}</Text><Text style={s.muted}>{o.medicine.strength}</Text></View>
                       <Text style={{ fontSize: 17, fontWeight: '800', color: colors.green }}>{money(o.price)}</Text>
                       <View style={s.row}><Ionicons name="storefront-outline" size={13} color={colors.muted} /><Text style={[s.muted, { flex: 1, fontSize: 12 }]} numberOfLines={1}>{o.pharmacy.name}</Text></View>
@@ -97,7 +101,7 @@ export default function HomeScreen() {
                 <Card style={{ paddingVertical: 4 }}>
                   {data.popularMedicines.slice(0, 6).map((m, i) => (
                     <Pressable key={m.id} onPress={() => router.push(`/medicine/${m.id}`)} style={[s.row, { paddingVertical: 12 }, i > 0 && { borderTopWidth: 1, borderTopColor: colors.line }]}>
-                      <MedicineIcon name={m.name} size={40} />
+                      <MedicineIcon name={m.name} imageId={m.imageId} size={44} />
                       <View style={{ flex: 1 }}><Text style={s.h3}>{m.name} <Text style={s.muted}>{m.strength}</Text></Text><Text style={s.muted}>{m.pharmacies ? `In stock at ${m.pharmacies} pharmacies` : 'Out of stock nearby'}</Text></View>
                       <View style={{ alignItems: 'flex-end' }}>{m.minPrice ? <><Text style={[s.muted, { fontSize: 11 }]}>from</Text><Text style={{ fontWeight: '800', color: colors.green }}>{money(m.minPrice)}</Text></> : <Badge label="Out of stock" />}</View>
                     </Pressable>

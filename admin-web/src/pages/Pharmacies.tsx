@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Badge, Button, Empty, Field, Icon, Spinner, fmtDate, money, timeAgo, useLoad, useToast } from '@medfinder/web-shared';
+import { Badge, Button, Empty, Field, Icon, Spinner, Thumb, fmtDate, imageUrl, money, timeAgo, useLoad, useToast } from '@medfinder/web-shared';
 import { api } from '../api';
 
 const TABS = [['pending', 'Requests'], ['approved', 'Approved'], ['suspended', 'Suspended'], ['rejected', 'Rejected'], ['', 'All']];
@@ -24,7 +24,7 @@ export default function Pharmacies() {
               <thead><tr><th>Pharmacy</th><th>Location</th><th>Licence</th><th>Status</th><th>Subscription</th><th className="num">Stock</th><th className="num">Orders</th><th>Registered</th></tr></thead>
               <tbody>{data.pharmacies.map((p: any) => (
                 <tr key={p.id} className="clickable" onClick={() => nav(`/pharmacies/${p.id}`)}>
-                  <td><strong>{p.name}</strong><div className="muted small">{p.email}</div></td>
+                  <td><span className="row" style={{ gap: 10 }}><Thumb src={imageUrl(p.logoImageId)} label={p.name} size={36} /><span><strong>{p.name}</strong><div className="muted small">{p.email}</div></span></span></td>
                   <td>{p.area || '—'}, {p.city}</td>
                   <td className="mono">{p.licenseNumber}</td>
                   <td><Badge>{p.approvalStatus}</Badge>{p.openComplaints > 0 && <span className="badge badge-red" style={{ marginLeft: 4 }}>{p.openComplaints} complaint{p.openComplaints > 1 ? 's' : ''}</span>}</td>
@@ -64,7 +64,7 @@ function PharmacyDrawer({ id, onClose, onChanged }: { id: number; onClose: () =>
   return (
     <div className="drawer-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="drawer" style={{ width: 'min(620px, 100%)' }}>
-        <div className="drawer-head"><div><h2>{p?.name || 'Pharmacy'}</h2>{p && <p className="muted small">Registered {fmtDate(p.createdAt)}</p>}</div><button className="icon-btn" onClick={onClose}><Icon name="x" /></button></div>
+        <div className="drawer-head"><div className="row">{p && <Thumb src={imageUrl(p.logoImageId)} label={p.name} size={48} />}<div><h2>{p?.name || 'Pharmacy'}</h2>{p && <p className="muted small">Registered {fmtDate(p.createdAt)}</p>}</div></div><button className="icon-btn" onClick={onClose}><Icon name="x" /></button></div>
         {loading && !p ? <Spinner /> : p && (
           <div className="drawer-body">
             <div className="row"><Badge>{p.approvalStatus}</Badge><Badge>{p.subscriptionStatus}</Badge>{p.rejectionReason && <span className="muted small">Reason: {p.rejectionReason}</span>}</div>
@@ -108,7 +108,7 @@ function PharmacyDrawer({ id, onClose, onChanged }: { id: number; onClose: () =>
               <div className="row-between"><h3>Stock ({data.stock.length})</h3><span className="muted small">Last update {timeAgo(p.lastSyncAt)}</span></div>
               <div className="table-wrap mt-s" style={{ maxHeight: 260, border: '1px solid var(--line)', borderRadius: 12 }}>
                 <table className="table"><thead><tr><th>Medicine</th><th className="num">Price</th><th className="num">Qty</th></tr></thead>
-                  <tbody>{data.stock.map((s: any) => <tr key={s.id}><td>{s.name} <span className="muted">{s.strength}</span></td><td className="num">{money(s.price)}</td><td className="num">{s.quantity}</td></tr>)}</tbody></table>
+                  <tbody>{data.stock.map((s: any) => <tr key={s.id}><td><span className="row" style={{ gap: 8 }}><Thumb src={imageUrl(s.imageId)} label={s.name} size={28} /><span>{s.name} <span className="muted">{s.strength}</span></span></span></td><td className="num">{money(s.price)}</td><td className="num">{s.quantity}</td></tr>)}</tbody></table>
               </div>
             </div>
             {data.complaints.length > 0 && (

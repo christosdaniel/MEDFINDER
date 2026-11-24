@@ -49,11 +49,25 @@ export function publicPharmacy(p, here) {
     openingHours: p.opening_hours,
     offersDelivery: !!p.offers_delivery,
     deliveryFee: p.delivery_fee,
+    logoImageId: p.logo_image_id ?? null,
     distanceKm: here ? distanceKm(here.lat, here.lng, p.lat, p.lng) : null,
   };
 }
 
 const sortByDistance = (a, b) => (a.distanceKm ?? 1e9) - (b.distanceKm ?? 1e9);
+
+/** Serve a stored picture. Ids change when a picture is replaced, so it can be cached forever. */
+r.get('/images/:id', (req, res) => {
+  const img = db.prepare('SELECT mime, data FROM images WHERE id = ?').get(Number(req.params.id));
+  if (!img) throw notFound('Image not found');
+  res.setHeader('Content-Type', img.mime);
+  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.end(Buffer.from(img.data));
+});
+
+// A medicine's picture: its catalogue photo, else any pharmacy's photo of it.
+const MED_IMAGE = `COALESCE(m.image_id, (SELECT ii.image_id FROM inventory ii WHERE ii.medicine_id = m.id AND ii.image_id IS NOT NULL LIMIT 1))`;
 
 r.get('/config', (req, res) => {
   const app = ['patient', 'pharmacy', 'admin'].includes(req.query.app) ? req.query.app : 'patient';
@@ -81,7 +95,7 @@ r.get('/home', (req, res) => {
   const nearbyIds = new Set(nearby.map((p) => p.id));
 
   const popular = db.prepare(`
-    SELECT m.id, m.name, m.strength, m.form, m.category,
+    SELECT m.id, m.name, m.strength, m.form, m.category, ${MED_IMAGE} AS imageId,
            COUNT(CASE WHEN i.quantity > 0 THEN 1 END) AS pharmacies,
            MIN(CASE WHEN i.quantity > 0 THEN i.price END) AS minPrice,
            (SELECT COALESCE(SUM(oi.quantity), 0) FROM order_items oi WHERE oi.medicine_id = m.id) AS sold
@@ -94,13 +108,14 @@ r.get('/home', (req, res) => {
   // Medicine + price cards from nearby pharmacies first, then others.
   const offers = db.prepare(`
     SELECT i.id AS inventoryId, i.price, i.quantity, i.low_stock_threshold AS threshold,
-           p.*, m.id AS medicineId, m.name AS med_name, m.strength AS med_strength, m.form AS med_form
+           p.*, m.id AS medicineId, m.name AS med_name, m.strength AS med_strength, m.form AS med_form, COALESCE(i.image_id, m.image_id) AS item_image_id
     FROM inventory i JOIN medicines m ON m.id = i.medicine_id
     JOIN pharmacies p ON p.id = i.pharmacy_id AND ${VISIBLE}
     WHERE i.quantity > 0 ORDER BY i.updated_at DESC LIMIT 200
   `).all().map((o) => ({
     inventoryId: o.inventoryId,
     medicine: { id: o.medicineId, name: o.med_name, strength: o.med_strength, form: o.med_form },
+    imageId: o.item_image_id ?? null,
     price: o.price,
     stock: stockLabel(o.quantity, o.threshold),
     pharmacy: publicPharmacy(o, here),
@@ -130,7 +145,7 @@ r.get('/medicines/search', (req, res) => {
   if (!q) return res.json({ results: [] });
   const like = `%${q.replace(/[%_]/g, '')}%`;
   const results = db.prepare(`
-    SELECT m.id, m.name, m.strength, m.form, m.category, m.requires_prescription AS requiresPrescription,
+    SELECT m.id, m.name, m.strength, m.form, m.category, m.requires_prescription AS requiresPrescription, ${MED_IMAGE} AS imageId,
            COUNT(DISTINCT CASE WHEN i.quantity > 0 AND ${VISIBLE} THEN p.id END) AS pharmacies,
            MIN(CASE WHEN i.quantity > 0 AND ${VISIBLE} THEN i.price END) AS minPrice
     FROM medicines m
@@ -153,15 +168,16 @@ r.get('/medicines/search', (req, res) => {
 /** Which pharmacies stock a medicine, with price, stock level and distance. */
 r.get('/medicines/:id/pharmacies', (req, res) => {
   const here = coords(req);
-  const med = db.prepare('SELECT * FROM medicines WHERE id = ?').get(req.params.id);
+  const med = db.prepare(`SELECT m.*, ${MED_IMAGE} AS any_image_id FROM medicines m WHERE m.id = ?`).get(req.params.id);
   if (!med) throw notFound('Medicine not found');
   const rows = db.prepare(`
-    SELECT i.id AS inventoryId, i.price, i.quantity, i.low_stock_threshold AS threshold, i.updated_at AS stockUpdatedAt, p.*
+    SELECT p.*, i.id AS inventoryId, i.price, i.quantity, i.low_stock_threshold AS threshold, i.updated_at AS stockUpdatedAt, i.image_id AS item_image_id
     FROM inventory i JOIN pharmacies p ON p.id = i.pharmacy_id
     WHERE i.medicine_id = ? AND ${VISIBLE}
   `).all(med.id);
   let list = rows.map((x) => ({
     inventoryId: x.inventoryId,
+    imageId: x.item_image_id ?? med.image_id ?? null,
     price: x.price,
     quantity: x.quantity,
     stock: stockLabel(x.quantity, x.threshold),
@@ -173,7 +189,7 @@ r.get('/medicines/:id/pharmacies', (req, res) => {
     (sort === 'price' ? a.price - b.price : sortByDistance(a.pharmacy, b.pharmacy)));
   const inStock = list.filter((l) => l.quantity > 0);
   res.json({
-    medicine: { id: med.id, name: med.name, strength: med.strength, form: med.form, category: med.category, description: med.description, requiresPrescription: !!med.requires_prescription },
+    medicine: { id: med.id, name: med.name, strength: med.strength, form: med.form, category: med.category, description: med.description, requiresPrescription: !!med.requires_prescription, imageId: med.any_image_id ?? null },
     available: inStock.length > 0,
     cheapest: inStock.length ? Math.min(...inStock.map((l) => l.price)) : null,
     pharmacies: list.map(({ quantity, ...rest }) => rest),
@@ -203,13 +219,15 @@ r.get('/pharmacies/:id', (req, res) => {
   const like = `%${q.replace(/[%_]/g, '')}%`;
   const stock = db.prepare(`
     SELECT i.id AS inventoryId, i.price, i.quantity, i.low_stock_threshold AS threshold, i.updated_at AS updatedAt,
-           m.id AS medicineId, m.name, m.strength, m.form, m.category, m.requires_prescription AS rx
+           m.id AS medicineId, m.name, m.strength, m.form, m.category, m.requires_prescription AS rx,
+           COALESCE(i.image_id, m.image_id) AS imageId
     FROM inventory i JOIN medicines m ON m.id = i.medicine_id
     WHERE i.pharmacy_id = ? AND (? = '' OR m.name LIKE ?)
     ORDER BY (i.quantity > 0) DESC, m.name
   `).all(p.id, q, like).map((s) => ({
     inventoryId: s.inventoryId,
     medicine: { id: s.medicineId, name: s.name, strength: s.strength, form: s.form, category: s.category, requiresPrescription: !!s.rx },
+    imageId: s.imageId ?? null,
     price: s.price,
     stock: stockLabel(s.quantity, s.threshold),
     updatedAt: s.updatedAt,

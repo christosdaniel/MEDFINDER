@@ -47,5 +47,13 @@ Also try: decline an order with a note (the patient sees the reason), and cancel
 ## Test 5: the patient is remembered
 Close the app completely (or close the browser tab) and open it again: you go straight to Home without logging in. After *Sign out*, the login screen already has your phone number filled in.
 
-## Test 6: automatic stock sync (optional, on the pharmacy laptop)
+## Test 6: pictures
+1. **Pharmacy**: *Pharmacy profile* → *Upload picture* (your logo or shopfront).
+2. **Pharmacy**: *Stock & prices* → click the letter tile next to a medicine → choose a photo of the pack.
+3. **Patient**: the medicine shows the photo on Home, in search, in the price comparison and on the pharmacy page (tap it to enlarge). The pharmacy shows its picture in the lists.
+4. **Patient**: *Profile* → *Add a profile photo* → take one or choose from your photos.
+5. **Pharmacy**: open that patient's order. Their photo shows next to their name.
+6. **Admin**: *Medicines* → edit a medicine → set its default photo.
+
+## Test 7: automatic stock sync (optional, on the pharmacy laptop)
 Follow `tools/stock-sync-agent/README.md`: point the agent at an Excel file with the sync key from *Import / link database*, change a price in Excel and save. Within a minute the new price shows in the patient app.
