@@ -5,12 +5,12 @@ import ExcelJS from 'exceljs';
 import { parse as parseCsv } from 'csv-parse/sync';
 import MDBReader from 'mdb-reader';
 import { db, tx } from '../db.js';
-import { bad } from './http.js';
+import { bad, HttpError } from './http.js';
 import { fireRestockAlerts, lowStockCheck } from './notify.js';
 
 export const COLUMN_ALIASES = {
   name: ['name', 'medicine', 'medicine name', 'drug', 'drug name', 'product', 'product name', 'item', 'item name', 'description', 'brand', 'generic name'],
-  strength: ['strength', 'dose', 'dosage', 'mg', 'size', 'pack size', 'pack'],
+  strength: ['strength', 'dose', 'dosage', 'mg'],
   form: ['form', 'dosage form', 'type', 'formulation', 'unit'],
   category: ['category', 'class', 'group', 'therapeutic class'],
   price: ['price', 'unit price', 'selling price', 'sale price', 'retail price', 'price (ghs)', 'price ghs', 'ghs', 'cost', 'amount', 'sp'],
@@ -101,9 +101,25 @@ function readAccess(buffer, tableName) {
 /** Parse an uploaded file buffer into raw rows. */
 export async function readStockFile(buffer, filename, opts = {}) {
   const ext = String(filename || '').toLowerCase().split('.').pop();
-  if (ext === 'xlsx' || ext === 'xlsm') return { ...(await readXlsx(buffer)), format: 'xlsx' };
-  if (ext === 'csv' || ext === 'txt') return { ...readCsv(buffer), format: 'csv' };
-  if (ext === 'mdb' || ext === 'accdb') return { ...readAccess(buffer, opts.table), format: 'access' };
+  const known = ['xlsx', 'xlsm', 'csv', 'txt', 'mdb', 'accdb'];
+  if (known.includes(ext)) {
+    let parsed;
+    try {
+      if (ext === 'xlsx' || ext === 'xlsm') parsed = { ...(await readXlsx(buffer)), format: 'xlsx' };
+      else if (ext === 'csv' || ext === 'txt') parsed = { ...readCsv(buffer), format: 'csv' };
+      else parsed = { ...readAccess(buffer, opts.table), format: 'access' };
+    } catch (e) {
+      if (e instanceof HttpError) throw e;
+      const how = ext.startsWith('xls')
+        ? 'Open it in Excel and choose File → Save As → Excel Workbook (.xlsx), or save it as CSV, then upload again. Password-protected files can\'t be read.'
+        : ext === 'csv' || ext === 'txt'
+          ? 'Make sure it is a comma-separated text file with a header row.'
+          : 'Make sure the database is not password-protected, or export the stock table from Access to Excel and upload that.';
+      throw bad(`We couldn't read "${filename}". ${how}`);
+    }
+    if (!parsed.rows.length) throw bad(`"${filename}" has no rows under the header. Check you saved the sheet that contains your stock list.`);
+    return parsed;
+  }
   if (ext === 'xls') throw bad('Old .xls files are not supported. In Excel choose File → Save As → Excel Workbook (.xlsx) and upload again.');
   throw bad('Unsupported file. Upload an Excel (.xlsx), CSV (.csv) or Access (.mdb / .accdb) file.');
 }
@@ -118,10 +134,30 @@ const num = (v) => {
 const truthy = (v) => ['yes', 'y', 'true', '1', 'x', 'rx', 'pom'].includes(norm(v));
 
 /** Split "Paracetamol 500mg" into name + strength when there's no strength column. */
-function splitStrength(name) {
-  const m = String(name).match(/^(.*?)[\s,]+(\d+(?:\.\d+)?\s?(?:mg|g|mcg|ml|iu|%)(?:\s?\/\s?\d+(?:\.\d+)?\s?(?:mg|g|mcg|ml)?)?.*)$/i);
-  return m ? { name: m[1].trim(), strength: m[2].trim() } : { name: String(name).trim(), strength: '' };
+const DOSE_RE = /(\d+(?:\.\d+)?(?:\s?(?:mg|mcg|g|ml))?\s?\/\s?\d+(?:\.\d+)?(?:\s?(?:mg|mcg|g|ml))?|\d+(?:\.\d+)?\s?(?:mg|g|mcg|µg|ml|iu|%))(?![a-z0-9])/i;
+const FORMS = {
+  tablets: 'Tablets', tablet: 'Tablets', tabs: 'Tablets', tab: 'Tablets', caplets: 'Tablets',
+  capsules: 'Capsules', capsule: 'Capsules', caps: 'Capsules', cap: 'Capsules',
+  syrup: 'Syrup', syr: 'Syrup', suspension: 'Suspension', susp: 'Suspension',
+  injection: 'Injection', inj: 'Injection', cream: 'Cream', ointment: 'Ointment', oint: 'Ointment',
+  drops: 'Drops', inhaler: 'Inhaler', sachets: 'Sachets', sachet: 'Sachets', gel: 'Gel',
+};
+const FORM_RE = new RegExp(`\\s(${Object.keys(FORMS).join('|')})\\.?\\s*$`, 'i'); // only as the last word
+
+/** "Paracetamol 500mg Tablets" → { name: "Paracetamol", strength: "500mg", form: "Tablets" }. */
+export function splitStrength(raw) {
+  let name = String(raw).trim();
+  let strength = '';
+  let form = null;
+  const d = name.match(DOSE_RE);
+  if (d && d.index > 0) { strength = d[1].replace(/\s+/g, ''); name = (name.slice(0, d.index) + ' ' + name.slice(d.index + d[0].length)); }
+  name = name.replace(/\s{2,}/g, ' ').trim();
+  const f = name.match(FORM_RE);
+  if (f && f.index > 0) { form = FORMS[f[1].toLowerCase()]; name = name.slice(0, f.index); }
+  name = name.replace(/\s*[,\-–(]+\s*$/, '').replace(/\(\s*\)/g, '').replace(/\s{2,}/g, ' ').trim();
+  return { name: name || String(raw).trim(), strength, form };
 }
+const TOTAL_RE = /^(grand\s+)?(sub\s*)?totals?\b/i;
 
 /** Convert raw rows into clean stock records using a column mapping. */
 export function normaliseRows(rows, mapping) {
@@ -132,10 +168,11 @@ export function normaliseRows(rows, mapping) {
   const errors = [];
   rows.forEach((r, i) => {
     const rawName = String(r[mapping.name] ?? '').trim();
-    if (!rawName) return; // skip blank lines silently
+    if (!rawName || TOTAL_RE.test(rawName)) return; // skip blank and total lines silently
     let name = rawName;
     let strength = mapping.strength ? String(r[mapping.strength] ?? '').trim() : '';
-    if (!mapping.strength) ({ name, strength } = splitStrength(rawName));
+    let guessedForm = null;
+    if (!strength) ({ name, strength, form: guessedForm } = splitStrength(rawName));
     const price = num(r[mapping.price]);
     const quantity = Math.max(0, Math.round(num(r[mapping.quantity])));
     if (!Number.isFinite(price) || price < 0) { errors.push(`Row ${i + 2}: invalid price for "${rawName}"`); return; }
@@ -144,7 +181,7 @@ export function normaliseRows(rows, mapping) {
     items.push({
       name,
       strength,
-      form: mapping.form ? String(r[mapping.form] ?? '').trim() || null : null,
+      form: (mapping.form ? String(r[mapping.form] ?? '').trim() || null : null) || guessedForm,
       category: mapping.category ? String(r[mapping.category] ?? '').trim() || null : null,
       sku: mapping.sku ? String(r[mapping.sku] ?? '').trim() || null : null,
       requires_prescription: mapping.requires_prescription ? truthy(r[mapping.requires_prescription]) : false,

@@ -232,3 +232,38 @@ test('column detection handles common pharmacy spreadsheet headers', async () =>
   assert.equal(m.form, 'Dosage Form');
   assert.equal(m.low_stock_threshold, 'Reorder Level');
 });
+
+test('medicine names are split into name, strength and form', async () => {
+  const { splitStrength } = await import('../src/lib/stockImport.js');
+  assert.deepEqual(splitStrength('Paracetamol 500mg Tablets'), { name: 'Paracetamol', strength: '500mg', form: 'Tablets' });
+  assert.deepEqual(splitStrength('Amoxicillin Caps 500mg'), { name: 'Amoxicillin', strength: '500mg', form: 'Capsules' });
+  assert.deepEqual(splitStrength('Coartem 20/120mg'), { name: 'Coartem', strength: '20/120mg', form: null });
+  assert.deepEqual(splitStrength('Cough syrup (Benylin) 100ml'), { name: 'Cough syrup (Benylin)', strength: '100ml', form: null });
+  assert.deepEqual(splitStrength('Panadol Extra'), { name: 'Panadol Extra', strength: '', form: null });
+});
+
+test('real-world spreadsheet: title rows, pack size column, totals row; unreadable files get a clear message', async () => {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Stock List');
+  ws.addRow(['TEST PHARMACY - STOCK LIST']);
+  ws.addRow([]);
+  ws.addRow(['S/N', 'Item Description', 'Pack Size', 'Selling Price', 'Qty In Stock']);
+  ws.addRow([1, 'Paracetamol 500mg Tablets', '100s', 9.5, 120]);
+  ws.addRow([2, 'Amoxicillin Caps 500mg', '21s', 24, 40]);
+  ws.addRow(['', 'TOTAL', '', '', { formula: 'SUM(E4:E5)', result: 160 }]);
+  const fd = new FormData();
+  fd.append('file', new Blob([await wb.xlsx.writeBuffer()]), 'stock-list.xlsx');
+  fd.append('dryRun', 'true');
+  const r = await call('POST', '/pharmacy/inventory/import', { token: S.ph, form: fd });
+  assert.equal(r.status, 200, r.error);
+  assert.equal(r.validRows, 2);
+  assert.deepEqual(r.errors, []);
+  assert.equal(r.mapping.strength, undefined);
+  assert.deepEqual([r.items[0].name, r.items[0].strength, r.items[0].form], ['Paracetamol', '500mg', 'Tablets']);
+
+  const broken = new FormData();
+  broken.append('file', new Blob(['this is not really an excel file']), 'renamed.xlsx');
+  const b = await call('POST', '/pharmacy/inventory/import', { token: S.ph, form: broken });
+  assert.equal(b.status, 400);
+  assert.match(b.error, /couldn't read "renamed\.xlsx"/);
+});
