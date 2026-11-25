@@ -76,7 +76,7 @@ async function searchCommons(query, limit = 12) {
 // ---------- deciding whether a picture is a good match ----------
 const SYNONYMS = { paracetamol: ['acetaminophen', 'panadol'], acetaminophen: ['paracetamol'], ors: ['oral rehydration'], 'vitamin c': ['ascorbic acid'] };
 const REJECT = /\b(structure|formula|molecule|molecular|skeletal|3d|ball[- ]and[- ]stick|space[- ]?filling|model|chemical|synthesis|chart|graph|diagram|map|logo|crystal|spectrum|mechanism|pathway|plant|flower|tree|leaf|leaves|herb|patent|poster|advert|statue|portrait|bioart|illustration|icon|clipart|cartoon|drawing|vector|infographic)\b/i;
-const PACK_WORDS = /\b(tablets?|capsules?|caps|pills?|pack|packet|box|blister|bottle|sachets?|syrup|suspension|inhaler|vial|ampoules?|medicine|drug|medication|pharmacy)\b/i;
+const PACK_WORDS = /\b(tablets?|capsules?|caps|pills?|pack|packet|box|blister|bottle|sachets?|syrup|suspension|inhaler|vial|ampoules?|medicine|drug|medication|pharmacy|m[ée]dicaments?|comprim[ée]s?|g[ée]lules?|bo[iî]te|antimalarial|antibiotics?)\b/i;
 const LICENSE_OK = /^(cc0|public domain|pd\b|pd-|cc by(-sa)?\b|cc-by(-sa)?\b|attribution)/i;
 const norm = (s) => String(s || '').toLowerCase().replace(/[_\-]+/g, ' ').replace(/\.(jpe?g|png|webp|tiff?)$/i, '').replace(/\s+/g, ' ');
 
@@ -130,7 +130,8 @@ export async function suggestPhotos(med, limit = 8) {
       const score = scoreCandidate(c, med);
       if (score > 0) seen.set(c.sourceUrl, { ...c, score });
     }
-    if (seen.size >= limit) break;
+    // Stop early only once there's a confident match; otherwise try the next search.
+    if (seen.size >= limit && [...seen.values()].some((c) => c.score >= AUTO_MIN_SCORE + 2)) break;
   }
   return [...seen.values()].sort((a, b) => b.score - a.score).slice(0, limit)
     .map((c) => ({ ...c, credit: `${c.author}, ${c.license}, via Wikimedia Commons` }));
