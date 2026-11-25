@@ -21,7 +21,7 @@ export default function PharmacyScreen() {
   const { q, coords, cart, addToCart, setQty, patient } = useSession();
   const [filter, setFilter] = useState('');
   const [fav, setFav] = useState(false);
-  const [viewing, setViewing] = useState<{ id: number; title: string } | null>(null);
+  const [viewing, setViewing] = useState<{ id: number; title: string; credit?: string | null } | null>(null);
   const { data, loading, error } = useApi<Resp>(`/pharmacies/${id}?${q}`, [id, q]);
 
   useEffect(() => {
@@ -89,7 +89,7 @@ export default function PharmacyScreen() {
             const qty = inCart(line.medicine.id);
             return (
               <View key={line.inventoryId} style={[s.row, { paddingVertical: 12 }, i > 0 && { borderTopWidth: 1, borderTopColor: colors.line }, out && { opacity: 0.55 }]}>
-                <Pressable disabled={!line.imageId} onPress={() => line.imageId && setViewing({ id: line.imageId, title: `${line.medicine.name} ${line.medicine.strength}` })}>
+                <Pressable disabled={!line.imageId} onPress={() => line.imageId && setViewing({ id: line.imageId, title: `${line.medicine.name} ${line.medicine.strength}`, credit: line.imageCredit })}>
                   <MedicineIcon name={line.medicine.name} imageId={line.imageId} size={52} />
                 </Pressable>
                 <View style={{ flex: 1, gap: 3 }}>
@@ -111,7 +111,7 @@ export default function PharmacyScreen() {
           <Text style={[s.muted, { textAlign: 'center' }]}><Ionicons name="flag-outline" size={13} /> Wrong stock or price? Report it</Text>
         </Pressable>
       </ScrollView>
-      <PhotoViewer imageId={viewing?.id ?? null} title={viewing?.title} onClose={() => setViewing(null)} />
+      <PhotoViewer imageId={viewing?.id ?? null} title={viewing?.title} credit={viewing?.credit} onClose={() => setViewing(null)} />
       {cartCount > 0 && (
         <View style={{ position: 'absolute', left: 18, right: 18, bottom: 24 }}>
           <Button title={`View cart · ${cartCount} item${cartCount > 1 ? 's' : ''} · ${money(cart!.items.reduce((t, i) => t + i.price * i.quantity, 0))}`} icon="cart" onPress={() => router.push('/checkout')} />

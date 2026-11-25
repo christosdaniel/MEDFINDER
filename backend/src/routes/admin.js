@@ -9,6 +9,7 @@ import { pharmacyProfile } from './pharmacy.js';
 import { patientProfile } from './patient.js';
 import { loadOrder, serializeOrder } from './orders-common.js';
 import { imageUpload, saveImage } from '../lib/images.js';
+import { suggestPhotos, importPhoto, enqueuePhotoLookup, lookupStatus, imageCredit } from '../lib/photoLookup.js';
 
 const r = Router();
 
@@ -236,7 +237,7 @@ r.patch('/settings', (req, res) => {
 r.get('/medicines', (req, res) => {
   const q = String(req.query.q || '').trim();
   res.json({ medicines: db.prepare(`SELECT m.*, (SELECT COUNT(*) FROM inventory i WHERE i.medicine_id = m.id) AS listings FROM medicines m WHERE (? = '' OR m.name LIKE ?) ORDER BY m.name LIMIT 500`).all(q, `%${q}%`)
-    .map((m) => ({ id: m.id, name: m.name, strength: m.strength, form: m.form, category: m.category, requiresPrescription: !!m.requires_prescription, description: m.description, listings: m.listings, imageId: m.image_id ?? null })) });
+    .map((m) => ({ id: m.id, name: m.name, strength: m.strength, form: m.form, category: m.category, requiresPrescription: !!m.requires_prescription, description: m.description, listings: m.listings, imageId: m.image_id ?? null, imageCredit: imageCredit(m.image_id)?.text ?? null })) });
 });
 r.patch('/medicines/:id', (req, res) => {
   const v = validate(req.body, { name: { max: 120 }, strength: { max: 60 }, form: { max: 60 }, category: { max: 60 }, description: { max: 1000 }, requiresPrescription: { type: 'boolean' } });
@@ -255,6 +256,32 @@ r.post('/medicines/:id/image', imageUpload.single('image'), async (req, res) => 
   db.prepare('UPDATE medicines SET image_id = ? WHERE id = ?').run(id, m.id);
   audit(req, 'medicine.image', `medicine:${m.id}`);
   res.json({ imageId: id });
+});
+
+r.get('/medicines/:id/photo-suggestions', async (req, res) => {
+  const m = db.prepare('SELECT * FROM medicines WHERE id = ?').get(Number(req.params.id));
+  if (!m) throw notFound('Medicine not found');
+  try { res.json({ suggestions: await suggestPhotos(m) }); }
+  catch (e) { throw new HttpError(503, e.message || 'Could not search for photos right now'); }
+});
+r.post('/medicines/:id/photo-from-suggestion', async (req, res) => {
+  const m = db.prepare('SELECT * FROM medicines WHERE id = ?').get(Number(req.params.id));
+  if (!m) throw notFound('Medicine not found');
+  const id = await importPhoto(req.body || {}, 'medicine', m.id, m.image_id);
+  db.prepare('UPDATE medicines SET image_id = ? WHERE id = ?').run(id, m.id);
+  audit(req, 'medicine.image_commons', `medicine:${m.id}`);
+  res.json({ imageId: id });
+});
+/** Look up photos for every medicine that still has none (runs in the background). */
+r.post('/medicines/fill-photos', (req, res) => {
+  const ids = db.prepare('SELECT id FROM medicines WHERE image_id IS NULL').all().map((m) => m.id);
+  const queued = enqueuePhotoLookup(ids, { force: true });
+  audit(req, 'medicine.fill_photos', null, { queued });
+  res.json({ queued, progress: lookupStatus });
+});
+r.get('/medicines/photo-status', (_req, res) => {
+  const missing = db.prepare('SELECT COUNT(*) AS n FROM medicines WHERE image_id IS NULL').get().n;
+  res.json({ missing, ...lookupStatus });
 });
 
 // ---------- Admin users & audit ----------

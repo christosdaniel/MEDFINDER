@@ -7,6 +7,7 @@ import MDBReader from 'mdb-reader';
 import { db, tx } from '../db.js';
 import { bad, HttpError } from './http.js';
 import { fireRestockAlerts, lowStockCheck } from './notify.js';
+import { enqueuePhotoLookup } from './photoLookup.js';
 
 export const COLUMN_ALIASES = {
   name: ['name', 'medicine', 'medicine name', 'drug', 'drug name', 'product', 'product name', 'item', 'item name', 'description', 'brand', 'generic name'],
@@ -237,5 +238,6 @@ export function applyStock(pharmacyId, items, { mode = 'merge', source = 'manual
   });
   fireRestockAlerts(result.touched);
   lowStockCheck(pharmacyId, result.touched);
+  enqueuePhotoLookup(result.touched);
   return { created: result.created, updated: result.updated, zeroed: result.zeroed, total: items.length, errors };
 }

@@ -60,3 +60,12 @@ Stock is deducted when the pharmacy **accepts** (so it can't be sold twice) and 
 ## Why SQLite
 
 It needs no separate database server, is fast for this workload, and is easy to back up (one file). To scale beyond one server, move the same schema to PostgreSQL; queries are plain SQL.
+
+## Automatic medicine photos
+
+`backend/src/lib/photoLookup.js`. When a medicine without a picture is added (manually, by file import or by the sync agent), or on server start, it is queued. A background worker searches Wikimedia Commons slowly (one request every few seconds, honouring 429/Retry-After) and keeps only:
+- real photos (JPEG/PNG/WebP, at least 300px wide; no diagrams, molecules, illustrations),
+- whose title or description contains the medicine name (with a few synonyms, e.g. paracetamol/acetaminophen), not combination products,
+- with a reusable licence (CC0, public domain, CC BY, CC BY-SA).
+
+Only confident matches are attached automatically; pharmacies and admins can browse all suggestions and pick one. Imported photos store author, licence and source, and the apps show a credit line, as those licences require. Admins can switch the feature off (*App control → Automatic medicine photos*).

@@ -22,13 +22,14 @@ export function ProfilePic({ imageId, label, size = 44, round = true, icon }: { 
 }
 
 /** Tap a medicine photo to see it full screen. */
-export function PhotoViewer({ imageId, title, onClose }: { imageId: number | null; title?: string; onClose: () => void }) {
+export function PhotoViewer({ imageId, title, credit, onClose }: { imageId: number | null; title?: string; credit?: string | null; onClose: () => void }) {
   const uri = imageUrl(imageId);
   return (
     <Modal visible={!!uri} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable onPress={onClose} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.88)', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
         {uri && <Image source={{ uri }} style={{ width: '100%', height: '70%' }} resizeMode="contain" />}
         {title && <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700', marginTop: 16, textAlign: 'center' }}>{title}</Text>}
+        {credit && <Text style={{ color: '#cfd8d3', fontSize: 11, marginTop: 6, textAlign: 'center' }}>{credit}</Text>}
         <Text style={{ color: '#cfd8d3', marginTop: 8 }}>Tap anywhere to close</Text>
       </Pressable>
     </Modal>

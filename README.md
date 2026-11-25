@@ -33,7 +33,7 @@ Design references: [use case diagram](docs/diagrams/use_case_diagram.drawio), [a
 ### Pharmacy web app
 - **Register** the pharmacy (licence, contact, address, map pin from GPS or coordinates, bio, opening hours, delivery fee). It goes live after admin approval.
 - **Dashboard**: new orders, today's sales, low stock, orders this week, and medicines patients are looking for.
-- **Stock & prices**: add medicines, edit price and quantity in place, low-stock thresholds, and a **photo of each medicine** (the pack the pharmacy sells). The first photo of a medicine also becomes its default picture for patients.
+- **Stock & prices**: add medicines, edit price and quantity in place, low-stock thresholds, and a **photo of each medicine** (the pack the pharmacy sells). The first photo of a medicine also becomes its default picture for patients. **Medicines without a photo get one automatically** from Wikimedia Commons (free-licence photos only, credited), and pharmacies can pick from suggested photos with one click.
 - **Profile picture** (logo or shopfront) so patients recognise the pharmacy.
 - **Link your database**:
   - Upload **Excel (.xlsx), CSV, or Microsoft Access (.mdb / .accdb)**. Columns are detected automatically (e.g. "Drug Name", "Selling Price", "Qty on hand") with a preview and manual column mapping. Choose *update listed medicines* or *full stock take*.

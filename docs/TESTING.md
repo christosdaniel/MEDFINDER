@@ -53,7 +53,8 @@ Close the app completely (or close the browser tab) and open it again: you go st
 3. **Patient**: the medicine shows the photo on Home, in search, in the price comparison and on the pharmacy page (tap it to enlarge). The pharmacy shows its picture in the lists.
 4. **Patient**: *Profile* → *Add a profile photo* → take one or choose from your photos.
 5. **Pharmacy**: open that patient's order. Their photo shows next to their name.
-6. **Admin**: *Medicines* → edit a medicine → set its default photo.
+6. **Admin**: *Medicines* → edit a medicine → set its default photo, or *Find photo online*.
+7. **Automatic photos**: as a pharmacy, *Add medicine* with a common name (e.g. *Amoxicillin 500mg Capsules*) without a photo. Within a minute or two its photo appears, taken from Wikimedia Commons. **Admin** → *Medicines* → *Fill missing photos* does the same for the whole catalogue. Switch it off in *App control* → *Automatic medicine photos*.
 
 ## Test 7: automatic stock sync (optional, on the pharmacy laptop)
 Follow `tools/stock-sync-agent/README.md`: point the agent at an Excel file with the sync key from *Import / link database*, change a price in Excel and save. Within a minute the new price shows in the patient app.

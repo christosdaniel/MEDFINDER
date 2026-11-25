@@ -87,10 +87,10 @@ export type PharmacySummary = {
 };
 export type MedicineSummary = {
   id: number; name: string; strength: string; form: string | null; category: string | null;
-  pharmacies?: number; minPrice?: number | null; requiresPrescription?: boolean; imageId?: number | null;
+  pharmacies?: number; minPrice?: number | null; requiresPrescription?: boolean; imageId?: number | null; imageCredit?: string | null;
 };
 export type StockLine = {
-  inventoryId: number; medicine: MedicineSummary; price: number; stock: 'Available' | 'Low stock' | 'Out of stock'; updatedAt?: string; imageId?: number | null;
+  inventoryId: number; medicine: MedicineSummary; price: number; stock: 'Available' | 'Low stock' | 'Out of stock'; updatedAt?: string; imageId?: number | null; imageCredit?: string | null;
 };
 export type Order = {
   id: number; code: string; status: string; statusText: string; method: 'pickup' | 'delivery'; deliveryAddress: string | null;

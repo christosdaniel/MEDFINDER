@@ -10,6 +10,7 @@ import { notify, fireRestockAlerts, lowStockCheck } from '../lib/notify.js';
 import { readStockFile, detectMapping, normaliseRows, applyStock, upsertMedicine, COLUMN_ALIASES } from '../lib/stockImport.js';
 import { loadOrder, serializeOrder, nextStatuses, ORDER_STATUS_TEXT } from './orders-common.js';
 import { imageUpload, saveImage, copyImage, deleteImage } from '../lib/images.js';
+import { suggestPhotos, importPhoto, enqueuePhotoLookup, imageCredit } from '../lib/photoLookup.js';
 import { stockLabel } from './public.js';
 
 const r = Router();
@@ -199,6 +200,7 @@ function invRow(i) {
     requiresPrescription: !!i.requires_prescription, price: i.price, quantity: i.quantity, lowStockThreshold: i.low_stock_threshold,
     sku: i.sku, stock: stockLabel(i.quantity, i.low_stock_threshold), updatedAt: i.updated_at,
     imageId: i.image_id ?? null, catalogueImageId: i.medicine_image_id ?? null,
+    catalogueImageCredit: imageCredit(i.medicine_image_id)?.text ?? null,
   };
 }
 const INV_SELECT = `SELECT i.*, m.name, m.strength, m.form, m.category, m.requires_prescription, m.image_id AS medicine_image_id FROM inventory i JOIN medicines m ON m.id = i.medicine_id`;
@@ -240,6 +242,7 @@ r.post('/inventory', (req, res) => {
   });
   db.prepare(`INSERT INTO import_logs (pharmacy_id, source, rows_total, created_count) VALUES (?, 'manual', 1, 1)`).run(req.user.id);
   fireRestockAlerts([result.mid]);
+  enqueuePhotoLookup([result.mid]);
   res.status(201).json({ item: invRow(db.prepare(`${INV_SELECT} WHERE i.id = ?`).get(result.id)) });
 });
 
@@ -279,6 +282,32 @@ r.post('/inventory/:id/image', imageUpload.single('image'), async (req, res) => 
   if (!med.image_id) db.prepare('UPDATE medicines SET image_id = ? WHERE id = ?').run(copyImage(id, 'medicine', item.medicine_id), item.medicine_id);
   res.json({ item: invRow(db.prepare(`${INV_SELECT} WHERE i.id = ?`).get(item.id)) });
 });
+/** Free photos from Wikimedia Commons that match this stock item's medicine. */
+r.get('/inventory/:id/photo-suggestions', async (req, res) => {
+  const item = db.prepare(`${INV_SELECT} WHERE i.id = ? AND i.pharmacy_id = ?`).get(Number(req.params.id), req.user.id);
+  if (!item) throw notFound('Item not found');
+  try {
+    res.json({ suggestions: await suggestPhotos(item) });
+  } catch (e) {
+    throw new HttpError(503, e.message || 'Could not search for photos right now');
+  }
+});
+
+/** Use one of the suggested photos for this stock item (and as the catalogue default if none). */
+r.post('/inventory/:id/photo-from-suggestion', async (req, res) => {
+  const item = db.prepare('SELECT * FROM inventory WHERE id = ? AND pharmacy_id = ?').get(Number(req.params.id), req.user.id);
+  if (!item) throw notFound('Item not found');
+  const id = await importPhoto(req.body || {}, 'inventory', item.id, item.image_id);
+  db.prepare(`UPDATE inventory SET image_id = ?, updated_at = datetime('now') WHERE id = ?`).run(id, item.id);
+  const med = db.prepare('SELECT image_id FROM medicines WHERE id = ?').get(item.medicine_id);
+  if (!med.image_id) {
+    const copy = copyImage(id, 'medicine', item.medicine_id);
+    db.prepare('UPDATE images SET source_url = (SELECT source_url FROM images WHERE id = ?), author = (SELECT author FROM images WHERE id = ?), license = (SELECT license FROM images WHERE id = ?), auto = 1 WHERE id = ?').run(id, id, id, copy);
+    db.prepare('UPDATE medicines SET image_id = ? WHERE id = ?').run(copy, item.medicine_id);
+  }
+  res.json({ item: invRow(db.prepare(`${INV_SELECT} WHERE i.id = ?`).get(item.id)) });
+});
+
 r.delete('/inventory/:id/image', (req, res) => {
   const item = db.prepare('SELECT * FROM inventory WHERE id = ? AND pharmacy_id = ?').get(Number(req.params.id), req.user.id);
   if (!item) throw notFound('Item not found');

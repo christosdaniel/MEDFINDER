@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 import { db, getSetting } from '../db.js';
 import { config } from '../config.js';
 import { distanceKm, notFound } from '../lib/http.js';
+import { imageCredit } from '../lib/photoLookup.js';
 
 const r = Router();
 
@@ -178,6 +179,7 @@ r.get('/medicines/:id/pharmacies', (req, res) => {
   let list = rows.map((x) => ({
     inventoryId: x.inventoryId,
     imageId: x.item_image_id ?? med.image_id ?? null,
+    imageCredit: imageCredit(x.item_image_id ?? med.image_id)?.text ?? null,
     price: x.price,
     quantity: x.quantity,
     stock: stockLabel(x.quantity, x.threshold),
@@ -189,7 +191,7 @@ r.get('/medicines/:id/pharmacies', (req, res) => {
     (sort === 'price' ? a.price - b.price : sortByDistance(a.pharmacy, b.pharmacy)));
   const inStock = list.filter((l) => l.quantity > 0);
   res.json({
-    medicine: { id: med.id, name: med.name, strength: med.strength, form: med.form, category: med.category, description: med.description, requiresPrescription: !!med.requires_prescription, imageId: med.any_image_id ?? null },
+    medicine: { id: med.id, name: med.name, strength: med.strength, form: med.form, category: med.category, description: med.description, requiresPrescription: !!med.requires_prescription, imageId: med.any_image_id ?? null, imageCredit: imageCredit(med.any_image_id)?.text ?? null },
     available: inStock.length > 0,
     cheapest: inStock.length ? Math.min(...inStock.map((l) => l.price)) : null,
     pharmacies: list.map(({ quantity, ...rest }) => rest),
@@ -228,6 +230,7 @@ r.get('/pharmacies/:id', (req, res) => {
     inventoryId: s.inventoryId,
     medicine: { id: s.medicineId, name: s.name, strength: s.strength, form: s.form, category: s.category, requiresPrescription: !!s.rx },
     imageId: s.imageId ?? null,
+    imageCredit: imageCredit(s.imageId)?.text ?? null,
     price: s.price,
     stock: stockLabel(s.quantity, s.threshold),
     updatedAt: s.updatedAt,

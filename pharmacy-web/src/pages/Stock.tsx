@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Badge, Button, Empty, Field, Icon, Modal, PhotoPicker, Spinner, Thumb, imageUrl, money, timeAgo, useLoad, useToast } from '@medfinder/web-shared';
+import { Badge, Button, Empty, Field, Icon, Modal, PhotoPicker, PhotoSuggestions, Spinner, Thumb, imageUrl, money, timeAgo, useLoad, useToast } from '@medfinder/web-shared';
 import { api, type InventoryItem } from '../api';
 import { useAuth } from '../auth';
 
@@ -149,17 +149,29 @@ function ItemModal({ item, onClose, onSaved, onChanged }: { item: InventoryItem 
               src={imageUrl(current.imageId ?? current.catalogueImageId)}
               label={current.name}
               size={88}
-              hint={!current.imageId && current.catalogueImageId ? 'Showing the default MedFinder photo. Upload your own pack photo.' : undefined}
+              hint={!current.imageId && current.catalogueImageId
+                ? (current.catalogueImageCredit ? `Added automatically. ${current.catalogueImageCredit}. Upload your own pack photo if it looks different.` : 'Showing the default MedFinder photo. Upload your own pack photo.')
+                : undefined}
               onUpload={async (file) => { const fd = new FormData(); fd.append('image', file); const r = await api.post(`/pharmacy/inventory/${current.id}/image`, fd); setCurrent(r.item); onChanged(); }}
               onRemove={current.imageId ? async () => { const r = await api.del(`/pharmacy/inventory/${current.id}/image`); setCurrent(r.item); onChanged(); } : undefined}
             />
-          ) : (
+          ) : null}
+          {current && (
+            <div className="mt-s">
+              <PhotoSuggestions
+                load={() => api.get(`/pharmacy/inventory/${current.id}/photo-suggestions`)}
+                onPick={async (sug) => { const r = await api.post(`/pharmacy/inventory/${current.id}/photo-from-suggestion`, sug); setCurrent(r.item); onChanged(); toast('Photo added'); }}
+              />
+            </div>
+          )}
+          {!current && (
             <div className="row">
               {newPhoto && <img src={URL.createObjectURL(newPhoto)} alt="" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 12, border: '1px solid var(--line)' }} />}
               <label className="btn btn-secondary btn-sm" style={{ cursor: 'pointer' }}>
                 <Icon name="upload" size={16} /> {newPhoto ? 'Choose another photo' : 'Choose photo (optional)'}
                 <input type="file" accept="image/*" hidden onChange={(e) => setNewPhoto(e.target.files?.[0] || null)} />
               </label>
+              {!newPhoto && <span className="muted small">No photo? We'll look for a free one automatically.</span>}
             </div>
           )}
         </Field>

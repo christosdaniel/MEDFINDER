@@ -293,3 +293,46 @@ export function PhotoPicker({ src, label, size = 96, round = false, onUpload, on
     </div>
   );
 }
+
+export type PhotoSuggestion = { title: string; thumbUrl: string; sourceUrl: string; author: string; license: string; credit: string };
+
+/** Grid of free photos from Wikimedia Commons to pick from with one click. */
+export function PhotoSuggestions({ load, onPick }: { load: () => Promise<{ suggestions: PhotoSuggestion[] }>; onPick: (s: PhotoSuggestion) => Promise<unknown> }) {
+  const [state, setState] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
+  const [items, setItems] = useState<PhotoSuggestion[]>([]);
+  const [error, setError] = useState('');
+  const [picking, setPicking] = useState<string | null>(null);
+  const search = () => {
+    setState('loading'); setError('');
+    load().then((r) => { setItems(r.suggestions); setState('done'); }).catch((e) => { setError(e.message); setState('error'); });
+  };
+  if (state === 'idle') {
+    return <button type="button" className="btn btn-secondary btn-sm" onClick={search}><Icon name="search" size={16} /> Find photo online</button>;
+  }
+  return (
+    <div className="stack" style={{ gap: 8 }}>
+      {state === 'loading' && <Spinner label="Searching free photos on Wikimedia Commons…" />}
+      {state === 'error' && <div className="error-box">{error} <button type="button" className="btn btn-ghost btn-sm" onClick={search}>Try again</button></div>}
+      {state === 'done' && !items.length && <p className="muted small">No free photos found for this medicine. Upload your own instead.</p>}
+      {state === 'done' && items.length > 0 && (
+        <>
+          <p className="muted small">Free photos from Wikimedia Commons. Click one to use it. Check it shows the right medicine.</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 8 }}>
+            {items.map((s) => (
+              <button type="button" key={s.sourceUrl} title={`${s.title}\n${s.credit}`} disabled={!!picking}
+                onClick={() => { setPicking(s.sourceUrl); onPick(s).catch((e) => setError(e.message)).finally(() => setPicking(null)); }}
+                style={{ border: '1px solid var(--line)', borderRadius: 10, padding: 4, background: '#fff', cursor: 'pointer', textAlign: 'left' }}>
+                <div style={{ position: 'relative' }}>
+                  <img src={s.thumbUrl} alt={s.title} loading="lazy" style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: 8, display: 'block' }} />
+                  {picking === s.sourceUrl && <span style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', background: 'rgba(255,255,255,.7)' }}><span className="spinner dark" /></span>}
+                </div>
+                <span style={{ display: 'block', fontSize: 11, color: 'var(--muted)', marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.license} · {s.author}</span>
+              </button>
+            ))}
+          </div>
+          {error && <div className="error-box">{error}</div>}
+        </>
+      )}
+    </div>
+  );
+}

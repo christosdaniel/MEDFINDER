@@ -16,7 +16,7 @@ type Resp = {
   medicine: MedicineSummary & { description: string | null };
   available: boolean;
   cheapest: number | null;
-  pharmacies: { inventoryId: number; price: number; stock: string; stockUpdatedAt: string; pharmacy: PharmacySummary; imageId?: number | null }[];
+  pharmacies: { inventoryId: number; price: number; stock: string; stockUpdatedAt: string; pharmacy: PharmacySummary; imageId?: number | null; imageCredit?: string | null }[];
 };
 
 /** Compare every pharmacy that stocks this medicine (activity diagram: "Compare & route"). */
@@ -26,7 +26,7 @@ export default function MedicineScreen() {
   const { q, coords, addToCart, cart, features } = useSession();
   const [sort, setSort] = useState<'distance' | 'price'>('distance');
   const [alertSet, setAlertSet] = useState(false);
-  const [viewing, setViewing] = useState<{ id: number; title: string } | null>(null);
+  const [viewing, setViewing] = useState<{ id: number; title: string; credit?: string | null } | null>(null);
   const { data, loading, error } = useApi<Resp>(`/medicines/${id}/pharmacies?${q}&sort=${sort}`, [id, q, sort]);
 
   const notify = async () => {
@@ -53,7 +53,7 @@ export default function MedicineScreen() {
       {loading && !data ? <Loading /> : error ? <View style={s.pad}><ErrorBox text={error} /></View> : data && (
         <ScrollView contentContainerStyle={[s.pad, { paddingBottom: 40 }]}>
           <Card style={[s.row, { gap: 14 }]}>
-            <Pressable onPress={() => data.medicine.imageId && setViewing({ id: data.medicine.imageId, title: `${data.medicine.name} ${data.medicine.strength}` })}>
+            <Pressable onPress={() => data.medicine.imageId && setViewing({ id: data.medicine.imageId, title: `${data.medicine.name} ${data.medicine.strength}`, credit: data.medicine.imageCredit })}>
               <MedicineIcon name={data.medicine.name} imageId={data.medicine.imageId} size={72} />
             </Pressable>
             <View style={{ flex: 1, gap: 3 }}>
@@ -63,6 +63,7 @@ export default function MedicineScreen() {
             </View>
             {data.cheapest !== null && <View style={{ alignItems: 'flex-end' }}><Text style={[s.muted, { fontSize: 11 }]}>from</Text><Text style={{ fontSize: 18, fontWeight: '800', color: colors.green }}>{money(data.cheapest)}</Text></View>}
           </Card>
+          {data.medicine.imageCredit && <Text style={[s.muted, { fontSize: 11, marginTop: -10 }]}>{data.medicine.imageCredit}</Text>}
           {data.medicine.description && <Text style={s.body}>{data.medicine.description}</Text>}
 
           {!data.available ? (
@@ -107,7 +108,7 @@ export default function MedicineScreen() {
                   </View>
                 </Pressable>
                 {row.imageId && row.imageId !== data.medicine.imageId && (
-                  <Pressable onPress={() => setViewing({ id: row.imageId!, title: `${data.medicine.name} at ${row.pharmacy.name}` })} style={[s.row, { gap: 8 }]}>
+                  <Pressable onPress={() => setViewing({ id: row.imageId!, title: `${data.medicine.name} at ${row.pharmacy.name}`, credit: row.imageCredit })} style={[s.row, { gap: 8 }]}>
                     <MedicineIcon name={data.medicine.name} imageId={row.imageId} size={48} />
                     <Text style={[s.muted, { fontSize: 12 }]}>Their pack · tap to enlarge</Text>
                   </Pressable>
@@ -128,7 +129,7 @@ export default function MedicineScreen() {
           })}
         </ScrollView>
       )}
-      <PhotoViewer imageId={viewing?.id ?? null} title={viewing?.title} onClose={() => setViewing(null)} />
+      <PhotoViewer imageId={viewing?.id ?? null} title={viewing?.title} credit={viewing?.credit} onClose={() => setViewing(null)} />
     </SafeAreaView>
   );
 }

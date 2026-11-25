@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Button, Empty, Field, Icon, Modal, PhotoPicker, Spinner, Thumb, imageUrl, useLoad, useToast } from '@medfinder/web-shared';
+import { useEffect, useState } from 'react';
+import { Button, Empty, Field, Icon, Modal, PhotoPicker, PhotoSuggestions, Spinner, Thumb, imageUrl, useLoad, useToast } from '@medfinder/web-shared';
 import { api } from '../api';
 
 export default function Medicines() {
@@ -8,6 +8,7 @@ export default function Medicines() {
   const { data, loading, reload } = useLoad(() => api.get(`/admin/medicines?q=${encodeURIComponent(q)}`), [q]);
   return (
     <>
+      <PhotoFill onDone={reload} />
       <div className="row-between">
         <div className="search"><Icon name="search" size={18} /><input className="input" placeholder="Search catalogue…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
         <p className="muted small">The catalogue grows automatically as pharmacies add stock. Tidy names and categories here.</p>
@@ -44,8 +45,14 @@ function EditMedicine({ m, onClose, onDone }: { m: any; onClose: () => void; onD
     <Modal title={`Edit ${m.name}`} onClose={onClose}>
       <div className="stack">
         <Field label="Default photo" hint="Shown to patients wherever a pharmacy hasn't added its own photo of this medicine.">
-          <PhotoPicker src={imageUrl(f.imageId)} label={m.name} size={88}
-            onUpload={async (file) => { const fd = new FormData(); fd.append('image', file); const r = await api.post(`/admin/medicines/${m.id}/image`, fd); setF({ ...f, imageId: r.imageId }); toast('Photo updated'); }} />
+          <PhotoPicker src={imageUrl(f.imageId)} label={m.name} size={88} hint={f.imageCredit || undefined}
+            onUpload={async (file) => { const fd = new FormData(); fd.append('image', file); const r = await api.post(`/admin/medicines/${m.id}/image`, fd); setF({ ...f, imageId: r.imageId, imageCredit: null }); toast('Photo updated'); }} />
+          <div className="mt-s">
+            <PhotoSuggestions
+              load={() => api.get(`/admin/medicines/${m.id}/photo-suggestions`)}
+              onPick={async (sug) => { const r = await api.post(`/admin/medicines/${m.id}/photo-from-suggestion`, sug); setF({ ...f, imageId: r.imageId, imageCredit: `Photo: ${sug.credit}` }); toast('Photo updated'); }}
+            />
+          </div>
         </Field>
         <div className="grid-2">
           <Field label="Name"><input value={f.name} onChange={set('name')} /></Field>
@@ -58,5 +65,36 @@ function EditMedicine({ m, onClose, onDone }: { m: any; onClose: () => void; onD
         <Button onClick={save}>Save</Button>
       </div>
     </Modal>
+  );
+}
+
+/** Shows how many medicines lack a photo and fills them from Wikimedia Commons in the background. */
+function PhotoFill({ onDone }: { onDone: () => void }) {
+  const toast = useToast();
+  const { data, reload } = useLoad(() => api.get('/admin/medicines/photo-status'));
+  const busy = data && (data.running || data.queued > 0);
+  useEffect(() => {
+    if (!busy) return;
+    const t = setInterval(() => { reload(); onDone(); }, 5000);
+    return () => clearInterval(t);
+  }, [busy, reload, onDone]);
+  if (!data) return null;
+  const start = async () => {
+    try { const r = await api.post('/admin/medicines/fill-photos'); toast(r.queued ? `Looking for photos for ${r.queued} medicines…` : 'Nothing to look up right now'); reload(); }
+    catch (e: any) { toast(e.message, 'err'); }
+  };
+  return (
+    <div className="card row-between">
+      <div>
+        <h3>Medicine photos</h3>
+        <p className="muted small">
+          {data.missing ? `${data.missing} medicines have no photo yet.` : 'Every medicine has a photo.'}
+          {' '}New medicines get a free photo from Wikimedia Commons automatically when one matches.
+          {busy && ` Working… ${data.queued} left, ${data.found} found so far.`}
+          {data.lastError && !busy && ` Last problem: ${data.lastError}`}
+        </p>
+      </div>
+      <Button icon="search" onClick={start} loading={!!busy} disabled={!data.missing}>Fill missing photos</Button>
+    </div>
   );
 }

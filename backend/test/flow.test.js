@@ -12,6 +12,9 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'medfinder-test-'));
 process.env.DB_PATH = path.join(dir, 'test.db');
 process.env.ADMIN_EMAIL = 'admin@test.gh';
 process.env.ADMIN_PASSWORD = 'Admin@12345';
+// No real Wikimedia calls in tests; the photo-lookup test uses a fake.
+process.env.PHOTO_LOOKUP = 'off';
+process.env.PHOTO_LOOKUP_GAP_MS = '0';
 
 const { createApp } = await import('../src/app.js');
 const { ensureAdmin } = await import('../src/seed.js');
@@ -321,4 +324,75 @@ test('pictures: pharmacy logo, medicine photos (with catalogue fallback) and pat
   // removing
   const del = await call('DELETE', '/patient/me/avatar', { token: S.pt });
   assert.equal(del.patient.avatarImageId, null);
+});
+
+test('automatic medicine photos from Wikimedia Commons (fake network)', async () => {
+  const sharp = (await import('sharp')).default;
+  const lookup = await import('../src/lib/photoLookup.js');
+  const jpg = await sharp({ create: { width: 900, height: 700, channels: 3, background: '#c0392b' } }).jpeg().toBuffer();
+  const info = (title, license, extra = {}) => ({
+    title: `File:${title}`, index: extra.index ?? 1,
+    imageinfo: [{ mime: extra.mime || 'image/jpeg', width: 1200, height: 900,
+      thumburl: `https://thumb.wikimedia.org/wikipedia/commons/thumb/x/${encodeURIComponent(title)}/800px-x.jpg`,
+      descriptionurl: `https://commons.wikimedia.org/wiki/File:${encodeURIComponent(title)}`,
+      extmetadata: { LicenseShortName: { value: license }, Artist: { value: '<a href="#">Jane Photographer</a>' }, ImageDescription: { value: extra.description || '' } } }],
+  });
+  const calls = [];
+  lookup.setFetch(async (url) => {
+    calls.push(String(url));
+    if (String(url).startsWith('https://commons.wikimedia.org/w/api.php')) {
+      return new Response(JSON.stringify({ query: { pages: {
+        1: info('Cetirizine molecule 3D.png', 'CC BY-SA 4.0', { index: 1, mime: 'image/png' }),
+        2: info('Hydroxyzine-cetirizine pack.jpg', 'CC BY 4.0', { index: 2 }),
+        3: info('Cetirizine 10mg tablets.jpg', 'CC BY-SA 4.0', { index: 3 }),
+        4: info('Cetirizine box.jpg', 'All rights reserved', { index: 4 }),
+        5: info('Bottle of Doxycycline.jpg', 'CC BY 2.0', { index: 5, description: 'pills' }),
+      } } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (String(url).startsWith('https://thumb.wikimedia.org/')) return new Response(jpg, { status: 200 });
+    return new Response('nope', { status: 404 });
+  });
+  delete process.env.PHOTO_LOOKUP;
+  try {
+    // A pharmacy adds a medicine that has no picture yet -> looked up automatically
+    const r = await call('POST', '/pharmacy/inventory', { token: S.ph, body: { name: 'Cetirizine', strength: '10mg', form: 'Tablets', price: 9, quantity: 50 } });
+    assert.equal(r.status, 201, r.error);
+    await lookup.drainPhotoQueue();
+    const inv = await call('GET', '/pharmacy/inventory?q=Cetirizine', { token: S.ph });
+    const item = inv.items[0];
+    assert.ok(item.catalogueImageId, 'catalogue photo was filled automatically');
+    assert.match(item.catalogueImageCredit, /Jane Photographer, CC BY-SA 4\.0, via Wikimedia Commons/);
+    // Patients see it, with credit
+    const med = await call('GET', `/medicines/${item.medicineId}/pharmacies`);
+    assert.equal(med.medicine.imageId, item.catalogueImageId);
+    assert.match(med.medicine.imageCredit, /Jane Photographer/);
+    assert.ok(calls.some((u) => u.includes('Cetirizine%2010mg%20tablets') || u.includes('Cetirizine 10mg tablets') || u.includes('Cetirizine%2010mg')), 'downloaded the matching photo');
+
+    // Suggestions exclude diagrams, combination products, non-free licences and other medicines
+    const sug = await call('GET', `/pharmacy/inventory/${item.id}/photo-suggestions`, { token: S.ph });
+    assert.equal(sug.status, 200, sug.error);
+    assert.deepEqual(sug.suggestions.map((x) => x.title), ['Cetirizine 10mg tablets.jpg']);
+
+    // Pharmacy picks a suggestion for its own stock item
+    const pick = await call('POST', `/pharmacy/inventory/${item.id}/photo-from-suggestion`, { token: S.ph, body: sug.suggestions[0] });
+    assert.equal(pick.status, 200, pick.error);
+    assert.ok(pick.item.imageId);
+    // Only Wikimedia addresses can be imported
+    const evil = await call('POST', `/pharmacy/inventory/${item.id}/photo-from-suggestion`, { token: S.ph, body: { ...sug.suggestions[0], thumbUrl: 'http://169.254.169.254/latest' } });
+    assert.equal(evil.status, 400);
+
+    // Admin: bulk fill and status
+    const st = await call('GET', '/admin/medicines/photo-status', { token: S.admin });
+    assert.equal(st.status, 200);
+    const fill = await call('POST', '/admin/medicines/fill-photos', { token: S.admin });
+    assert.equal(fill.status, 200);
+    await lookup.drainPhotoQueue();
+
+    // Switching the feature off stops automatic lookups
+    await call('PATCH', '/admin/features/auto_medicine_photos', { token: S.admin, body: { enabled: false } });
+    assert.equal(lookup.enqueuePhotoLookup([item.medicineId], { force: true }), 0);
+  } finally {
+    process.env.PHOTO_LOOKUP = 'off';
+    lookup.setFetch((...a) => fetch(...a));
+  }
 });

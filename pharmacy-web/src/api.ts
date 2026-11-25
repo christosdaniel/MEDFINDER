@@ -15,7 +15,7 @@ export type Pharmacy = {
 export type InventoryItem = {
   id: number; medicineId: number; name: string; strength: string; form: string | null; category: string | null;
   requiresPrescription: boolean; price: number; quantity: number; lowStockThreshold: number; sku: string | null;
-  stock: string; updatedAt: string; imageId: number | null; catalogueImageId: number | null;
+  stock: string; updatedAt: string; imageId: number | null; catalogueImageId: number | null; catalogueImageCredit: string | null;
 };
 
 export type Order = {

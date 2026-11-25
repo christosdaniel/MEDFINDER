@@ -275,6 +275,12 @@ addColumn('pharmacies', 'logo_image_id', 'INTEGER');
 addColumn('patients', 'avatar_image_id', 'INTEGER');
 addColumn('inventory', 'image_id', 'INTEGER');
 addColumn('medicines', 'image_id', 'INTEGER');
+addColumn('medicines', 'photo_checked_at', 'TEXT');
+// Credit for photos imported from Wikimedia Commons (their licences require it).
+addColumn('images', 'source_url', 'TEXT');
+addColumn('images', 'author', 'TEXT');
+addColumn('images', 'license', 'TEXT');
+addColumn('images', 'auto', 'INTEGER NOT NULL DEFAULT 0');
 
 const defaultFlags = [
   ['delivery', 'Home delivery', 'Patients can choose delivery when the pharmacy offers it', 'all'],
@@ -283,6 +289,7 @@ const defaultFlags = [
   ['complaints', 'Report a pharmacy', 'Patients can file complaints about listings or orders', 'patient'],
   ['stock_import', 'Excel / Access stock import', 'Pharmacies can upload spreadsheets or Access databases', 'pharmacy'],
   ['sync_agent', 'Automatic stock sync agent', 'Pharmacies can link a local stock file that syncs automatically', 'pharmacy'],
+  ['auto_medicine_photos', 'Automatic medicine photos', 'Find a free photo on Wikimedia Commons when a medicine has no picture', 'all'],
   ['maintenance_mode', 'Maintenance mode', 'Show a maintenance banner and block new orders', 'all'],
 ];
 const insFlag = db.prepare(
