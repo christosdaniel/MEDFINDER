@@ -9,22 +9,22 @@ import { upload } from './pharmacy.js';
 
 const r = Router();
 
-function pharmacyFromKey(req) {
+async function pharmacyFromKey(req) {
   const key = req.headers['x-sync-key'];
   if (!key) throw new HttpError(401, 'Missing X-Sync-Key header');
-  const p = db.prepare('SELECT id, name, approval_status FROM pharmacies WHERE sync_key = ?').get(String(key));
+  const p = (await db.get('SELECT id, name, approval_status FROM pharmacies WHERE sync_key = ?', String(key)));
   if (!p) throw new HttpError(401, 'Invalid sync key. Copy the key again from Stock → Link your database.');
-  if (!db.prepare(`SELECT enabled FROM feature_flags WHERE key = 'sync_agent'`).get()?.enabled) throw new HttpError(503, 'Automatic sync is switched off by MedFinder right now');
+  if (!(await db.get(`SELECT enabled FROM feature_flags WHERE key = 'sync_agent'`))?.enabled) throw new HttpError(503, 'Automatic sync is switched off by MedFinder right now');
   return p;
 }
 
-r.get('/ping', (req, res) => {
-  const p = pharmacyFromKey(req);
+r.get('/ping', async (req, res) => {
+  const p = await pharmacyFromKey(req);
   res.json({ ok: true, pharmacy: p.name, approvalStatus: p.approval_status });
 });
 
 r.post('/stock', upload.single('file'), async (req, res) => {
-  const p = pharmacyFromKey(req);
+  const p = await pharmacyFromKey(req);
   if (!req.file) throw bad('Attach the stock file as "file"');
   const parsed = await readStockFile(req.file.buffer, req.file.originalname, { table: req.body.table });
   let mapping = detectMapping(parsed.headers);
@@ -33,7 +33,7 @@ r.post('/stock', upload.single('file'), async (req, res) => {
   }
   const { items, errors } = normaliseRows(parsed.rows, mapping);
   if (!items.length) throw bad('No valid rows found', errors);
-  const result = applyStock(p.id, items, { mode: req.body.mode === 'replace' ? 'replace' : 'merge', source: 'sync-agent', filename: req.file.originalname, errors });
+  const result = await applyStock(p.id, items, { mode: req.body.mode === 'replace' ? 'replace' : 'merge', source: 'sync-agent', filename: req.file.originalname, errors });
   res.json({ ...result, mapping, pharmacy: p.name });
 });
 

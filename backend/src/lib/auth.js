@@ -15,7 +15,7 @@ export const checkPassword = (pw, hash) => bcrypt.compare(pw, hash);
 
 /** Express middleware: require a valid token for one of the given roles. */
 export function requireAuth(...roles) {
-  return (req, _res, next) => {
+  return async (req, _res, next) => {
     const header = req.headers.authorization || '';
     const token = header.startsWith('Bearer ') ? header.slice(7) : null;
     if (!token) return next(new HttpError(401, 'Please sign in'));
@@ -24,14 +24,14 @@ export function requireAuth(...roles) {
       if (roles.length && !roles.includes(payload.role)) throw new HttpError(403, 'Not allowed');
       const id = Number(payload.sub);
       if (payload.role === 'patient') {
-        const p = db.prepare('SELECT id, status FROM patients WHERE id = ?').get(id);
+        const p = (await db.get('SELECT id, status FROM patients WHERE id = ?', id));
         if (!p) throw new HttpError(401, 'Account not found');
         if (p.status === 'suspended') throw new HttpError(403, 'This account has been suspended. Contact support.');
       } else if (payload.role === 'pharmacy') {
-        const p = db.prepare('SELECT id FROM pharmacies WHERE id = ?').get(id);
+        const p = (await db.get('SELECT id FROM pharmacies WHERE id = ?', id));
         if (!p) throw new HttpError(401, 'Account not found');
       } else if (payload.role === 'admin') {
-        const a = db.prepare('SELECT id FROM admins WHERE id = ?').get(id);
+        const a = (await db.get('SELECT id FROM admins WHERE id = ?', id));
         if (!a) throw new HttpError(401, 'Account not found');
       }
       req.user = { role: payload.role, id };

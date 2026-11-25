@@ -9,7 +9,8 @@ import path from 'node:path';
 import ExcelJS from 'exceljs';
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'medfinder-test-'));
-process.env.DB_PATH = path.join(dir, 'test.db');
+process.env.PGLITE_DIR = 'memory://'; // throwaway embedded Postgres
+delete process.env.DATABASE_URL;
 process.env.ADMIN_EMAIL = 'admin@test.gh';
 process.env.ADMIN_PASSWORD = 'Admin@12345';
 // No real Wikimedia calls in tests; the photo-lookup test uses a fake.
@@ -18,14 +19,16 @@ process.env.PHOTO_LOOKUP_GAP_MS = '0';
 
 const { createApp } = await import('../src/app.js');
 const { ensureAdmin } = await import('../src/seed.js');
+const { dbReady, closeDb } = await import('../src/db.js');
 
 let server, base;
 before(async () => {
+  await dbReady;
   await ensureAdmin();
   server = createApp().listen(0);
   base = `http://127.0.0.1:${server.address().port}/api`;
 });
-after(() => { server.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+after(async () => { server.close(); await closeDb(); fs.rmSync(dir, { recursive: true, force: true }); });
 
 async function call(method, url, { token, body, form, headers = {} } = {}) {
   const h = { ...headers };
@@ -390,9 +393,72 @@ test('automatic medicine photos from Wikimedia Commons (fake network)', async ()
 
     // Switching the feature off stops automatic lookups
     await call('PATCH', '/admin/features/auto_medicine_photos', { token: S.admin, body: { enabled: false } });
-    assert.equal(lookup.enqueuePhotoLookup([item.medicineId], { force: true }), 0);
+    assert.equal(await lookup.enqueuePhotoLookup([item.medicineId], { force: true }), 0);
   } finally {
     process.env.PHOTO_LOOKUP = 'off';
     lookup.setFetch((...a) => fetch(...a));
   }
+});
+
+test('every main screen loads on Postgres (dashboards, stats, subscription, admin lists)', async () => {
+  const check = async (method, url, token, body) => {
+    const r = await call(method, url, { token, body });
+    assert.ok(!r.error && (typeof r.status !== 'number' || r.status < 400), `${method} ${url} -> ${r.status} ${r.error || ''}`);
+    return r;
+  };
+  // patient app
+  const home = await check('GET', '/home?lat=5.55&lng=-0.18');
+  assert.ok(home.popularMedicines.length > 0);
+  assert.equal(typeof home.popularMedicines[0].pharmacies, 'number');
+  await check('GET', `/pharmacies/${S.phId}?lat=5.55&lng=-0.18`);
+  await check('GET', '/pharmacies?q=test');
+  await check('GET', '/config?app=patient');
+  const notes = await check('GET', '/patient/notifications', S.pt);
+  assert.ok(notes.notifications[0].createdAt, 'camelCase column names survive Postgres');
+  await check('GET', '/patient/restock-alerts', S.pt);
+  await check('GET', '/patient/favorites', S.pt);
+  await check('PUT', `/patient/favorites/${S.phId}`, S.pt);
+  await check('PUT', `/patient/favorites/${S.phId}`, S.pt); // twice is fine
+  await check('PATCH', '/patient/me', S.pt, { address: 'Osu', lat: 5.55, lng: -0.18 });
+  // pharmacy portal
+  const dash = await check('GET', '/pharmacy/dashboard', S.ph);
+  assert.equal(typeof dash.stats.ordersToday, 'number');
+  assert.equal(typeof dash.stats.monthRevenue, 'number');
+  await check('GET', '/pharmacy/orders?status=active', S.ph);
+  await check('GET', '/pharmacy/orders?status=history', S.ph);
+  const logs = await check('GET', '/pharmacy/inventory/import-logs', S.ph);
+  assert.ok(logs.logs[0].createdAt);
+  await check('GET', '/pharmacy/inventory?filter=low', S.ph);
+  const sub = await check('GET', '/pharmacy/subscription', S.ph);
+  const paid = await check('POST', '/pharmacy/subscription/pay', S.ph, { months: 3, method: 'momo', reference: 'TEST123' });
+  assert.equal(paid.pharmacy.subscriptionStatus, 'active');
+  assert.ok(new Date(paid.pharmacy.subscriptionExpiresAt) > new Date(Date.now() + 80 * 86400000));
+  const sub2 = await check('GET', '/pharmacy/subscription', S.ph);
+  assert.equal(sub2.payments.length, sub.payments.length + 1);
+  await check('GET', '/pharmacy/sync-key', S.ph);
+  await check('PATCH', '/pharmacy/me', S.ph, { bio: 'Updated bio', openingHours: 'Daily 8-8' });
+  // admin console
+  const stats = await check('GET', '/admin/stats', S.admin);
+  assert.equal(typeof stats.patients, 'number');
+  assert.ok(Array.isArray(stats.ordersByDay) && stats.ordersByDay.length > 0);
+  assert.match(stats.ordersByDay[0].day, /^\d{4}-\d{2}-\d{2}$/);
+  assert.ok(stats.topSearches.length > 0);
+  await check('GET', '/admin/pharmacies', S.admin);
+  await check('GET', `/admin/pharmacies/${S.phId}`, S.admin);
+  const ext = await check('POST', `/admin/pharmacies/${S.phId}/subscription`, S.admin, { status: 'active', extendDays: 30 });
+  assert.ok(new Date(ext.pharmacy.subscriptionExpiresAt) > new Date(paid.pharmacy.subscriptionExpiresAt));
+  await check('GET', '/admin/patients?q=Ama', S.admin);
+  await check('GET', '/admin/orders', S.admin);
+  await check('GET', '/admin/complaints', S.admin);
+  await check('GET', '/admin/features', S.admin);
+  await check('POST', '/admin/announcements', S.admin, { title: 'Hello', body: 'Testing', audience: 'all' });
+  await check('GET', '/admin/announcements', S.admin);
+  await check('PATCH', '/admin/settings', S.admin, { trial_days: '14' });
+  const settings = await check('GET', '/admin/settings', S.admin);
+  assert.equal(settings.settings.trial_days, '14');
+  await check('GET', '/admin/medicines?q=para', S.admin);
+  await check('GET', '/admin/admins', S.admin);
+  const audit = await check('GET', '/admin/audit', S.admin);
+  assert.ok(audit.entries[0].createdAt);
+  await check('GET', '/admin/notifications', S.admin);
 });

@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Button, Field, Icon } from '@medfinder/web-shared';
+import { Button, Field, Icon, PasswordInput } from '@medfinder/web-shared';
 import { api } from '../api';
 import { useAuth } from '../auth';
 
@@ -35,7 +35,7 @@ export default function Login() {
           <form onSubmit={submit}>
             {error && <div className="error-box">{error}</div>}
             <Field label="Email"><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="username" /></Field>
-            <Field label="Password"><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" /></Field>
+            <Field label="Password"><PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" /></Field>
             <Button type="submit" loading={busy} className="btn-block">Sign in</Button>
           </form>
         </div>

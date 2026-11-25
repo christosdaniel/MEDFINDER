@@ -1,286 +1,110 @@
-// SQLite database (Node's built-in node:sqlite, no native build step).
+// PostgreSQL database.
+// - Production: Supabase (or any Postgres) via DATABASE_URL.
+// - Local development and tests: PGlite, an embedded Postgres that runs inside
+//   Node (data in backend/data/pglite, or in memory for tests), so the same SQL
+//   runs everywhere.
 // Everything about patients, pharmacies, stock, orders and admin lives here,
-// so the apps can "remember" users between sessions.
-import { DatabaseSync } from 'node:sqlite';
+// so the apps "remember" users and nothing is lost when the server restarts.
+import { AsyncLocalStorage } from 'node:async_hooks';
 import fs from 'node:fs';
-import path from 'node:path';
 import { config } from './config.js';
+import { SCHEMA } from './schema.js';
 
-fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
-
-export const db = new DatabaseSync(config.dbPath);
-db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
-
-db.exec(`
-CREATE TABLE IF NOT EXISTS patients (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  first_name TEXT NOT NULL,
-  last_name TEXT NOT NULL,
-  phone TEXT NOT NULL UNIQUE,
-  email TEXT,
-  age INTEGER,
-  password_hash TEXT NOT NULL,
-  address TEXT,
-  lat REAL,
-  lng REAL,
-  phone_verified INTEGER NOT NULL DEFAULT 0,
-  status TEXT NOT NULL DEFAULT 'active',           -- active | suspended
-  push_token TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  last_login_at TEXT
-);
-
-CREATE TABLE IF NOT EXISTS otp_codes (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  phone TEXT NOT NULL,
-  code_hash TEXT NOT NULL,
-  purpose TEXT NOT NULL,                           -- verify | login | reset
-  expires_at TEXT NOT NULL,
-  attempts INTEGER NOT NULL DEFAULT 0,
-  used INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS pharmacies (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL,
-  owner_name TEXT NOT NULL,
-  email TEXT NOT NULL UNIQUE,
-  phone TEXT NOT NULL,
-  whatsapp TEXT,
-  password_hash TEXT NOT NULL,
-  license_number TEXT NOT NULL,
-  address TEXT NOT NULL,
-  area TEXT,
-  city TEXT NOT NULL DEFAULT 'Accra',
-  region TEXT NOT NULL DEFAULT 'Greater Accra',
-  lat REAL,
-  lng REAL,
-  bio TEXT,
-  opening_hours TEXT,
-  offers_delivery INTEGER NOT NULL DEFAULT 0,
-  delivery_fee REAL NOT NULL DEFAULT 0,
-  delivery_radius_km REAL NOT NULL DEFAULT 5,
-  approval_status TEXT NOT NULL DEFAULT 'pending', -- pending | approved | rejected | suspended
-  rejection_reason TEXT,
-  subscription_status TEXT NOT NULL DEFAULT 'trial', -- trial | active | expired
-  subscription_expires_at TEXT,
-  sync_key TEXT UNIQUE,
-  last_sync_at TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  approved_at TEXT
-);
-
-CREATE TABLE IF NOT EXISTS admins (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL,
-  email TEXT NOT NULL UNIQUE,
-  password_hash TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS medicines (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL,
-  strength TEXT NOT NULL DEFAULT '',
-  form TEXT,                                        -- tablets, capsules, syrup...
-  category TEXT,
-  requires_prescription INTEGER NOT NULL DEFAULT 0,
-  description TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  UNIQUE (name COLLATE NOCASE, strength COLLATE NOCASE)
-);
-
-CREATE TABLE IF NOT EXISTS inventory (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  pharmacy_id INTEGER NOT NULL REFERENCES pharmacies(id) ON DELETE CASCADE,
-  medicine_id INTEGER NOT NULL REFERENCES medicines(id) ON DELETE CASCADE,
-  price REAL NOT NULL,
-  quantity INTEGER NOT NULL DEFAULT 0,
-  low_stock_threshold INTEGER NOT NULL DEFAULT 10,
-  sku TEXT,
-  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-  UNIQUE (pharmacy_id, medicine_id)
-);
-
-CREATE TABLE IF NOT EXISTS orders (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  code TEXT NOT NULL UNIQUE,
-  patient_id INTEGER NOT NULL REFERENCES patients(id),
-  pharmacy_id INTEGER NOT NULL REFERENCES pharmacies(id),
-  method TEXT NOT NULL,                             -- pickup | delivery
-  delivery_address TEXT,
-  delivery_lat REAL,
-  delivery_lng REAL,
-  status TEXT NOT NULL DEFAULT 'pending',
-  payment_method TEXT NOT NULL DEFAULT 'cash',      -- cash | momo
-  payment_status TEXT NOT NULL DEFAULT 'unpaid',    -- unpaid | paid
-  subtotal REAL NOT NULL,
-  delivery_fee REAL NOT NULL DEFAULT 0,
-  total REAL NOT NULL,
-  note TEXT,
-  pharmacy_note TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS order_items (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
-  medicine_id INTEGER NOT NULL REFERENCES medicines(id),
-  name TEXT NOT NULL,
-  strength TEXT,
-  unit_price REAL NOT NULL,
-  quantity INTEGER NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS order_events (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
-  status TEXT NOT NULL,
-  note TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS notifications (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  recipient_type TEXT NOT NULL,                     -- patient | pharmacy | admin
-  recipient_id INTEGER NOT NULL,
-  type TEXT NOT NULL,
-  title TEXT NOT NULL,
-  body TEXT NOT NULL,
-  data TEXT,
-  read INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-CREATE INDEX IF NOT EXISTS idx_notif_recipient ON notifications(recipient_type, recipient_id, read);
-
-CREATE TABLE IF NOT EXISTS restock_alerts (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  patient_id INTEGER NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
-  medicine_id INTEGER NOT NULL REFERENCES medicines(id) ON DELETE CASCADE,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  notified_at TEXT,
-  UNIQUE (patient_id, medicine_id)
-);
-
-CREATE TABLE IF NOT EXISTS recent_searches (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  patient_id INTEGER NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
-  query TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS favorites (
-  patient_id INTEGER NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
-  pharmacy_id INTEGER NOT NULL REFERENCES pharmacies(id) ON DELETE CASCADE,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  PRIMARY KEY (patient_id, pharmacy_id)
-);
-
-CREATE TABLE IF NOT EXISTS complaints (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  patient_id INTEGER REFERENCES patients(id) ON DELETE SET NULL,
-  pharmacy_id INTEGER REFERENCES pharmacies(id) ON DELETE CASCADE,
-  order_id INTEGER REFERENCES orders(id) ON DELETE SET NULL,
-  subject TEXT NOT NULL,
-  details TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'open',              -- open | investigating | resolved
-  admin_note TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  resolved_at TEXT
-);
-
-CREATE TABLE IF NOT EXISTS subscription_payments (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  pharmacy_id INTEGER NOT NULL REFERENCES pharmacies(id) ON DELETE CASCADE,
-  amount REAL NOT NULL,
-  months INTEGER NOT NULL DEFAULT 1,
-  method TEXT NOT NULL,
-  reference TEXT NOT NULL,
-  period_start TEXT NOT NULL,
-  period_end TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS import_logs (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  pharmacy_id INTEGER NOT NULL REFERENCES pharmacies(id) ON DELETE CASCADE,
-  source TEXT NOT NULL,                             -- upload:xlsx | upload:csv | upload:access | sync-agent | manual
-  filename TEXT,
-  rows_total INTEGER NOT NULL DEFAULT 0,
-  created_count INTEGER NOT NULL DEFAULT 0,
-  updated_count INTEGER NOT NULL DEFAULT 0,
-  zeroed_count INTEGER NOT NULL DEFAULT 0,
-  errors TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
--- Admin-controlled feature switches. Both apps read /api/config on start
--- so the admin can roll out (or switch off) features without an app update.
-CREATE TABLE IF NOT EXISTS feature_flags (
-  key TEXT PRIMARY KEY,
-  label TEXT NOT NULL,
-  description TEXT,
-  audience TEXT NOT NULL DEFAULT 'all',             -- patient | pharmacy | all
-  enabled INTEGER NOT NULL DEFAULT 1,
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS announcements (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  title TEXT NOT NULL,
-  body TEXT NOT NULL,
-  audience TEXT NOT NULL DEFAULT 'all',             -- patient | pharmacy | all
-  active INTEGER NOT NULL DEFAULT 1,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS settings (
-  key TEXT PRIMARY KEY,
-  value TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS audit_log (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  admin_id INTEGER,
-  action TEXT NOT NULL,
-  target TEXT,
-  details TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-`);
-
-// Pictures (pharmacy logos, patient profile photos, medicine photos) are stored
-// in the database so they live and get backed up with everything else.
-db.exec(`
-CREATE TABLE IF NOT EXISTS images (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  owner_type TEXT NOT NULL,                         -- pharmacy_logo | patient_avatar | inventory | medicine
-  owner_id INTEGER NOT NULL,
-  mime TEXT NOT NULL,
-  data BLOB NOT NULL,
-  width INTEGER,
-  height INTEGER,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-`);
-
-/** Add a column to an existing table if it isn't there yet (simple migrations). */
-function addColumn(table, column, type) {
-  const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
-  if (!cols.includes(column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+/** Convert `?` placeholders to Postgres `$1, $2…` (our SQL never uses ? in literals). */
+function toPg(sql) {
+  let i = 0;
+  return sql.replace(/\?/g, () => `$${++i}`);
 }
-addColumn('pharmacies', 'logo_image_id', 'INTEGER');
-addColumn('patients', 'avatar_image_id', 'INTEGER');
-addColumn('inventory', 'image_id', 'INTEGER');
-addColumn('medicines', 'image_id', 'INTEGER');
-addColumn('medicines', 'photo_checked_at', 'TEXT');
-// Credit for photos imported from Wikimedia Commons (their licences require it).
-addColumn('images', 'source_url', 'TEXT');
-addColumn('images', 'author', 'TEXT');
-addColumn('images', 'license', 'TEXT');
-addColumn('images', 'auto', 'INTEGER NOT NULL DEFAULT 0');
+
+let driver; // { query(sql, params) -> {rows, rowCount}, transaction(fn), end() }
+
+async function connect() {
+  if (config.databaseUrl) {
+    const pg = (await import('pg')).default;
+    pg.types.setTypeParser(20, (v) => parseInt(v, 10)); // COUNT(*) etc. as numbers
+    pg.types.setTypeParser(1700, (v) => parseFloat(v)); // NUMERIC as numbers
+    const pool = new pg.Pool({
+      connectionString: config.databaseUrl,
+      ssl: config.databaseUrl.includes('localhost') ? false : { rejectUnauthorized: false },
+      max: Number(process.env.DB_POOL_SIZE || 5),
+      idleTimeoutMillis: 30000,
+    });
+    pool.on('error', (e) => console.error('Postgres pool error:', e.message));
+    return {
+      kind: 'postgres',
+      query: (sql, params) => pool.query(sql, params),
+      exec: (sql) => pool.query(sql),
+      async transaction(fn) {
+        const client = await pool.connect();
+        try {
+          await client.query('BEGIN');
+          const out = await fn({ query: (s, p) => client.query(s, p) });
+          await client.query('COMMIT');
+          return out;
+        } catch (e) {
+          await client.query('ROLLBACK').catch(() => {});
+          throw e;
+        } finally { client.release(); }
+      },
+      end: () => pool.end(),
+    };
+  }
+  const { PGlite } = await import('@electric-sql/pglite');
+  const dir = config.pgliteDir;
+  if (dir !== 'memory://') fs.mkdirSync(dir, { recursive: true });
+  const lite = new PGlite(dir === 'memory://' ? undefined : dir);
+  await lite.waitReady;
+  return {
+    kind: 'pglite',
+    query: async (sql, params) => {
+      const r = await lite.query(sql, params);
+      return { rows: r.rows, rowCount: r.affectedRows ?? r.rows.length };
+    },
+    exec: (sql) => lite.exec(sql),
+    transaction: (fn) => lite.transaction((t) => fn({
+      query: async (s, p) => { const r = await t.query(s, p); return { rows: r.rows, rowCount: r.affectedRows ?? r.rows.length }; },
+    })),
+    end: () => lite.close(),
+  };
+}
+
+// Queries made inside tx() automatically use the transaction's connection.
+const txStore = new AsyncLocalStorage();
+let ready;
+
+async function run(sql, params = []) {
+  await ready;
+  const conn = txStore.getStore() || driver;
+  return conn.query(toPg(sql), params.map((v) => (v === undefined ? null : v)));
+}
+
+export const db = {
+  /** All matching rows. */
+  all: async (sql, ...params) => (await run(sql, params)).rows,
+  /** First matching row (or undefined). */
+  get: async (sql, ...params) => (await run(sql, params)).rows[0],
+  /** Run a statement; returns { rowCount, rows } (add RETURNING id to get new ids). */
+  run: async (sql, ...params) => { const r = await run(sql, params); return { rowCount: r.rowCount, changes: r.rowCount, rows: r.rows }; },
+  /** Execute several statements (no parameters). */
+  exec: async (sql) => { await ready; return driver.exec(sql); },
+  get kind() { return driver?.kind; },
+};
+
+/** Run fn inside a transaction; everything rolls back if it throws. */
+export async function tx(fn) {
+  await ready;
+  if (txStore.getStore()) return fn(); // already inside one
+  return driver.transaction((conn) => txStore.run(conn, fn));
+}
+
+export async function getSetting(key) {
+  return (await db.get('SELECT value FROM settings WHERE key = ?', key))?.value;
+}
+
+export async function closeDb() {
+  await ready;
+  await driver.end();
+}
 
 const defaultFlags = [
   ['delivery', 'Home delivery', 'Patients can choose delivery when the pharmacy offers it', 'all'],
@@ -292,33 +116,25 @@ const defaultFlags = [
   ['auto_medicine_photos', 'Automatic medicine photos', 'Find a free photo on Wikimedia Commons when a medicine has no picture', 'all'],
   ['maintenance_mode', 'Maintenance mode', 'Show a maintenance banner and block new orders', 'all'],
 ];
-const insFlag = db.prepare(
-  `INSERT OR IGNORE INTO feature_flags (key, label, description, audience, enabled) VALUES (?, ?, ?, ?, ?)`
-);
-for (const [k, l, d, a] of defaultFlags) insFlag.run(k, l, d, a, k === 'maintenance_mode' ? 0 : 1);
-
 const defaultSettings = {
   subscription_price_ghs: '150',
   trial_days: '30',
   support_phone: '+233 30 000 0000',
   min_app_version: '1.0.0',
 };
-const insSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
-for (const [k, v] of Object.entries(defaultSettings)) insSetting.run(k, v);
 
-export function getSetting(key) {
-  return db.prepare('SELECT value FROM settings WHERE key = ?').get(key)?.value;
-}
-
-/** Run fn inside a transaction; rolls back on throw. */
-export function tx(fn) {
-  db.exec('BEGIN');
-  try {
-    const out = fn();
-    db.exec('COMMIT');
-    return out;
-  } catch (e) {
-    db.exec('ROLLBACK');
-    throw e;
+async function init() {
+  driver = await connect();
+  await driver.exec(SCHEMA);
+  for (const [k, l, d, a] of defaultFlags) {
+    await driver.query('INSERT INTO feature_flags (key, label, description, audience, enabled) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (key) DO NOTHING',
+      [k, l, d, a, k === 'maintenance_mode' ? 0 : 1]);
+  }
+  for (const [k, v] of Object.entries(defaultSettings)) {
+    await driver.query('INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO NOTHING', [k, v]);
   }
 }
+
+ready = init();
+/** Resolves once the database is connected and the schema is in place. */
+export const dbReady = ready;

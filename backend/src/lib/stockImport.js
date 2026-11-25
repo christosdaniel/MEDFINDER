@@ -195,49 +195,65 @@ export function normaliseRows(rows, mapping) {
 }
 
 /** Find or create a catalogue medicine and return its id. */
-export function upsertMedicine({ name, strength = '', form = null, category = null, requires_prescription = false }) {
-  const found = db.prepare('SELECT id FROM medicines WHERE name = ? COLLATE NOCASE AND strength = ? COLLATE NOCASE').get(name, strength || '');
-  if (found) {
-    db.prepare(`UPDATE medicines SET form = COALESCE(form, ?), category = COALESCE(category, ?) WHERE id = ?`).run(form, category, found.id);
-    return found.id;
-  }
-  return Number(
-    db.prepare('INSERT INTO medicines (name, strength, form, category, requires_prescription) VALUES (?, ?, ?, ?, ?)')
-      .run(name, strength || '', form, category, requires_prescription ? 1 : 0).lastInsertRowid
-  );
+export async function upsertMedicine({ name, strength = '', form = null, category = null, requires_prescription = false }) {
+  const row = await db.get(`
+    INSERT INTO medicines (name, strength, form, category, requires_prescription) VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT ((lower(name)), (lower(strength))) DO UPDATE
+      SET form = COALESCE(medicines.form, EXCLUDED.form), category = COALESCE(medicines.category, EXCLUDED.category)
+    RETURNING id`, name, strength || '', form, category, requires_prescription ? 1 : 0);
+  return row.id;
 }
 
+const key = (name, strength) => `${String(name).toLowerCase()}|${String(strength || '').toLowerCase()}`;
+
 /**
- * Apply stock records to a pharmacy's inventory.
+ * Apply stock records to a pharmacy's inventory, in a few bulk statements
+ * (fast even when the database is far away, e.g. on Supabase).
  * mode "merge": update/insert listed items, leave others alone.
  * mode "replace": also set quantity to 0 for items not in the file (full stock take).
  */
-export function applyStock(pharmacyId, items, { mode = 'merge', source = 'manual', filename = null, errors = [] } = {}) {
-  const result = tx(() => {
-    let created = 0, updated = 0, zeroed = 0;
-    const touched = [];
-    const getInv = db.prepare('SELECT id FROM inventory WHERE pharmacy_id = ? AND medicine_id = ?');
-    const ins = db.prepare(`INSERT INTO inventory (pharmacy_id, medicine_id, price, quantity, low_stock_threshold, sku) VALUES (?, ?, ?, ?, ?, ?)`);
-    const upd = db.prepare(`UPDATE inventory SET price = ?, quantity = ?, low_stock_threshold = COALESCE(?, low_stock_threshold), sku = COALESCE(?, sku), updated_at = datetime('now') WHERE id = ?`);
-    for (const it of items) {
-      const mid = upsertMedicine(it);
-      touched.push(mid);
-      const row = getInv.get(pharmacyId, mid);
-      if (row) { upd.run(it.price, it.quantity, it.low_stock_threshold, it.sku, row.id); updated++; }
-      else { ins.run(pharmacyId, mid, it.price, it.quantity, it.low_stock_threshold ?? 10, it.sku); created++; }
+export async function applyStock(pharmacyId, items, { mode = 'merge', source = 'manual', filename = null, errors = [] } = {}) {
+  // One entry per medicine (the last row wins if a file lists a medicine twice).
+  const unique = new Map();
+  for (const it of items) unique.set(key(it.name, it.strength), it);
+  const list = [...unique.values()];
+
+  const result = await tx(async () => {
+    const meds = list.length ? await db.all(`
+      INSERT INTO medicines (name, strength, form, category, requires_prescription)
+      SELECT * FROM unnest(?::text[], ?::text[], ?::text[], ?::text[], ?::int[])
+      ON CONFLICT ((lower(name)), (lower(strength))) DO UPDATE
+        SET form = COALESCE(medicines.form, EXCLUDED.form), category = COALESCE(medicines.category, EXCLUDED.category)
+      RETURNING id, name, strength`,
+      list.map((i) => i.name), list.map((i) => i.strength || ''), list.map((i) => i.form ?? null),
+      list.map((i) => i.category ?? null), list.map((i) => (i.requires_prescription ? 1 : 0))) : [];
+    const idByKey = new Map(meds.map((m) => [key(m.name, m.strength), m.id]));
+    const mids = list.map((i) => idByKey.get(key(i.name, i.strength)));
+    const cols = [mids, list.map((i) => i.price), list.map((i) => i.quantity), list.map((i) => i.low_stock_threshold ?? null), list.map((i) => i.sku ?? null)];
+    let updated = 0, created = 0, zeroed = 0;
+    if (list.length) {
+      updated = (await db.run(`
+        UPDATE inventory i SET price = t.price, quantity = t.qty, low_stock_threshold = COALESCE(t.thr, i.low_stock_threshold),
+          sku = COALESCE(t.sku, i.sku), updated_at = now()
+        FROM unnest(?::int[], ?::float8[], ?::int[], ?::int[], ?::text[]) AS t(mid, price, qty, thr, sku)
+        WHERE i.pharmacy_id = ? AND i.medicine_id = t.mid`, ...cols, pharmacyId)).rowCount;
+      created = (await db.run(`
+        INSERT INTO inventory (pharmacy_id, medicine_id, price, quantity, low_stock_threshold, sku)
+        SELECT ?, t.mid, t.price, t.qty, COALESCE(t.thr, 10), t.sku
+        FROM unnest(?::int[], ?::float8[], ?::int[], ?::int[], ?::text[]) AS t(mid, price, qty, thr, sku)
+        ON CONFLICT (pharmacy_id, medicine_id) DO NOTHING`, pharmacyId, ...cols)).rowCount;
     }
-    if (mode === 'replace' && touched.length) {
-      const placeholders = touched.map(() => '?').join(',');
-      zeroed = Number(db.prepare(`UPDATE inventory SET quantity = 0, updated_at = datetime('now') WHERE pharmacy_id = ? AND quantity > 0 AND medicine_id NOT IN (${placeholders})`)
-        .run(pharmacyId, ...touched).changes);
+    if (mode === 'replace' && mids.length) {
+      zeroed = (await db.run(`UPDATE inventory SET quantity = 0, updated_at = now()
+        WHERE pharmacy_id = ? AND quantity > 0 AND NOT (medicine_id = ANY(?::int[]))`, pharmacyId, mids)).rowCount;
     }
-    db.prepare(`INSERT INTO import_logs (pharmacy_id, source, filename, rows_total, created_count, updated_count, zeroed_count, errors) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(pharmacyId, source, filename, items.length, created, updated, zeroed, errors.length ? JSON.stringify(errors.slice(0, 50)) : null);
-    db.prepare(`UPDATE pharmacies SET last_sync_at = datetime('now') WHERE id = ?`).run(pharmacyId);
-    return { created, updated, zeroed, touched };
+    await db.run(`INSERT INTO import_logs (pharmacy_id, source, filename, rows_total, created_count, updated_count, zeroed_count, errors) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      pharmacyId, source, filename, items.length, created, updated, zeroed, errors.length ? JSON.stringify(errors.slice(0, 50)) : null);
+    await db.run('UPDATE pharmacies SET last_sync_at = now() WHERE id = ?', pharmacyId);
+    return { created, updated, zeroed, touched: mids };
   });
-  fireRestockAlerts(result.touched);
-  lowStockCheck(pharmacyId, result.touched);
-  enqueuePhotoLookup(result.touched);
+  await fireRestockAlerts(result.touched);
+  await lowStockCheck(pharmacyId, result.touched);
+  await enqueuePhotoLookup(result.touched);
   return { created: result.created, updated: result.updated, zeroed: result.zeroed, total: items.length, errors };
 }

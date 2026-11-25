@@ -23,20 +23,30 @@ export function nextStatuses(order) {
   }
 }
 
-export function loadOrder(id) {
-  const o = db.prepare(`
+/** Load many orders (with items and timeline) in three queries, newest first. */
+export async function loadOrders(ids) {
+  if (!ids.length) return [];
+  const orders = await db.all(`
     SELECT o.*, p.logo_image_id AS pharmacy_logo_image_id, pt.avatar_image_id AS patient_avatar_image_id, p.name AS pharmacy_name, p.phone AS pharmacy_phone, p.address AS pharmacy_address, p.area AS pharmacy_area,
            p.lat AS pharmacy_lat, p.lng AS pharmacy_lng,
            pt.first_name, pt.last_name, pt.phone AS patient_phone, pt.email AS patient_email, pt.address AS patient_address
     FROM orders o JOIN pharmacies p ON p.id = o.pharmacy_id JOIN patients pt ON pt.id = o.patient_id
-    WHERE o.id = ?`).get(id);
-  if (!o) return null;
-  o.items = db.prepare(`SELECT oi.*, COALESCE(i.image_id, m.image_id) AS image_id FROM order_items oi
+    WHERE o.id = ANY(?::int[]) ORDER BY o.id DESC`, ids);
+  const items = await db.all(`SELECT oi.*, COALESCE(i.image_id, m.image_id) AS image_id FROM order_items oi
+    JOIN orders o ON o.id = oi.order_id
     JOIN medicines m ON m.id = oi.medicine_id
-    LEFT JOIN inventory i ON i.medicine_id = oi.medicine_id AND i.pharmacy_id = ?
-    WHERE oi.order_id = ?`).all(o.pharmacy_id, id);
-  o.events = db.prepare('SELECT status, note, created_at FROM order_events WHERE order_id = ? ORDER BY id').all(id);
-  return o;
+    LEFT JOIN inventory i ON i.medicine_id = oi.medicine_id AND i.pharmacy_id = o.pharmacy_id
+    WHERE oi.order_id = ANY(?::int[]) ORDER BY oi.id`, ids);
+  const events = await db.all('SELECT order_id, status, note, created_at FROM order_events WHERE order_id = ANY(?::int[]) ORDER BY id', ids);
+  for (const o of orders) {
+    o.items = items.filter((it) => it.order_id === o.id);
+    o.events = events.filter((e) => e.order_id === o.id);
+  }
+  return orders;
+}
+
+export async function loadOrder(id) {
+  return (await loadOrders([Number(id)]))[0] || null;
 }
 
 export function serializeOrder(o, { forPatient = false, forPharmacy = false } = {}) {

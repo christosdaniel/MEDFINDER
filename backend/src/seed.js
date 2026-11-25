@@ -2,15 +2,14 @@
 // loads demo pharmacies, medicines, stock and a demo patient for testing.
 import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-import { db, tx } from './db.js';
+import { db, tx, closeDb } from './db.js';
 import { config } from './config.js';
 import { hashPassword } from './lib/auth.js';
 import { upsertMedicine } from './lib/stockImport.js';
 
 export async function ensureAdmin() {
-  if (db.prepare('SELECT COUNT(*) AS n FROM admins').get().n) return;
-  db.prepare('INSERT INTO admins (name, email, password_hash) VALUES (?, ?, ?)')
-    .run(config.admin.name, config.admin.email.toLowerCase(), await hashPassword(config.admin.password));
+  if ((await db.get('SELECT COUNT(*) AS n FROM admins')).n) return;
+  (await db.run('INSERT INTO admins (name, email, password_hash) VALUES (?, ?, ?)', config.admin.name, config.admin.email.toLowerCase(), await hashPassword(config.admin.password)));
   console.log(`Created admin account ${config.admin.email} (change the password after first login)`);
 }
 
@@ -50,38 +49,38 @@ const PHARMACIES = [
 
 export async function seedDemo() {
   await ensureAdmin();
-  if (db.prepare('SELECT COUNT(*) AS n FROM pharmacies').get().n) {
+  if ((await db.get('SELECT COUNT(*) AS n FROM pharmacies')).n) {
     console.log('Database already has pharmacies; skipping demo data.');
     return;
   }
   const pharmacyHash = await hashPassword('Pharmacy@123');
   const patientHash = await hashPassword('Patient@123');
-  tx(() => {
-    const medIds = MEDICINES.map(([name, strength, form, category, rx]) => [name, upsertMedicine({ name, strength, form, category, requires_prescription: !!rx })]);
-    PHARMACIES.forEach((p, idx) => {
+  await tx(async () => {
+    const medIds = [];
+    for (const [name, strength, form, category, rx] of MEDICINES) medIds.push([name, await upsertMedicine({ name, strength, form, category, requires_prescription: !!rx })]);
+    for (const [idx, p] of PHARMACIES.entries()) {
       const slug = p.name.toLowerCase().replace(/[^a-z]+/g, '');
-      const id = Number(db.prepare(`INSERT INTO pharmacies (name, owner_name, email, phone, password_hash, license_number, address, area, city, region, lat, lng, bio, opening_hours,
+      const id = Number((await db.get(`INSERT INTO pharmacies (name, owner_name, email, phone, password_hash, license_number, address, area, city, region, lat, lng, bio, opening_hours,
           offers_delivery, delivery_fee, approval_status, subscription_status, subscription_expires_at, sync_key, approved_at, last_sync_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved', 'active', datetime('now', '+30 days'), ?, datetime('now'), datetime('now'))`)
-        .run(p.name, 'Demo Owner', `${slug}@demo.medfinder.gh`, `+23324${String(1000000 + idx * 1111).slice(0, 7)}`, pharmacyHash, `PC/GH/${2020 + (idx % 5)}/${1000 + idx}`,
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved', 'active', now() + interval '30 days', ?, now(), now()) RETURNING id`, p.name, 'Demo Owner', `${slug}@demo.medfinder.gh`, `+23324${String(1000000 + idx * 1111).slice(0, 7)}`, pharmacyHash, `PC/GH/${2020 + (idx % 5)}/${1000 + idx}`,
           `${10 + idx} Main Street, ${p.area}`, p.area, p.city, p.city === 'Kumasi' ? 'Ashanti' : 'Greater Accra', p.lat, p.lng, p.bio, p.hours, p.delivery, p.fee,
-          `mfsync_${crypto.randomBytes(24).toString('hex')}`).lastInsertRowid);
+          `mfsync_${crypto.randomBytes(24).toString('hex')}`)).id);
       // Each pharmacy stocks most medicines with slightly different prices and quantities.
-      medIds.forEach(([name, mid], j) => {
-        if ((idx + j) % 5 === 4) return; // not every pharmacy sells everything
+      for (const [j, [name, mid]] of medIds.entries()) {
+        if ((idx + j) % 5 === 4) continue; // not every pharmacy sells everything
         const price = Math.round(BASE_PRICE[name] * (0.9 + ((idx * 7 + j * 3) % 5) * 0.06) * 2) / 2;
         const qty = name === 'Ibuprofen' ? 0 : ((idx * 13 + j * 17) % 90) + ((idx + j) % 6 === 5 ? 0 : 6);
-        db.prepare('INSERT INTO inventory (pharmacy_id, medicine_id, price, quantity, low_stock_threshold) VALUES (?, ?, ?, ?, 10)').run(id, mid, price, qty);
-      });
-    });
+        (await db.run('INSERT INTO inventory (pharmacy_id, medicine_id, price, quantity, low_stock_threshold) VALUES (?, ?, ?, ?, 10)', id, mid, price, qty));
+      }
+    }
     // One pharmacy waiting for approval so the admin flow can be tested.
-    db.prepare(`INSERT INTO pharmacies (name, owner_name, email, phone, password_hash, license_number, address, area, city, lat, lng, bio, offers_delivery, sync_key, subscription_expires_at)
+    (await db.run(`INSERT INTO pharmacies (name, owner_name, email, phone, password_hash, license_number, address, area, city, lat, lng, bio, offers_delivery, sync_key, subscription_expires_at)
       VALUES ('Spintex MedPoint', 'Kofi Asante', 'spintex@demo.medfinder.gh', '+233244555666', ?, 'PC/GH/2024/2210', 'Spintex Road, near Coca-Cola roundabout', 'Spintex', 'Accra', 5.6400, -0.1000,
-      'New pharmacy on Spintex Road.', 1, ?, datetime('now', '+30 days'))`).run(pharmacyHash, `mfsync_${crypto.randomBytes(24).toString('hex')}`);
+      'New pharmacy on Spintex Road.', 1, ?, now() + interval '30 days')`, pharmacyHash, `mfsync_${crypto.randomBytes(24).toString('hex')}`));
 
-    db.prepare(`INSERT INTO patients (first_name, last_name, phone, email, password_hash, phone_verified, address, lat, lng)
-      VALUES ('Ama', 'Mensah', '+233241234567', 'ama@example.com', ?, 1, 'Osu, Accra', 5.5570, -0.1800)`).run(patientHash);
-    db.prepare(`INSERT INTO announcements (title, body, audience) VALUES ('Welcome to MedFinder Ghana', 'Find medicine fast at pharmacies near you. Pickup or delivery.', 'patient')`).run();
+    (await db.run(`INSERT INTO patients (first_name, last_name, phone, email, password_hash, phone_verified, address, lat, lng)
+      VALUES ('Ama', 'Mensah', '+233241234567', 'ama@example.com', ?, 1, 'Osu, Accra', 5.5570, -0.1800)`, patientHash));
+    (await db.run(`INSERT INTO announcements (title, body, audience) VALUES ('Welcome to MedFinder Ghana', 'Find medicine fast at pharmacies near you. Pickup or delivery.', 'patient')`));
   });
   console.log(`Demo data loaded:
   Admin     ${config.admin.email} / ${config.admin.password}
@@ -91,4 +90,5 @@ export async function seedDemo() {
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   await seedDemo();
+  await closeDb();
 }

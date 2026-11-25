@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Button, Field, Icon } from '@medfinder/web-shared';
+import { Button, Field, Icon, PasswordInput } from '@medfinder/web-shared';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import LocationPicker from '../components/LocationPicker';
@@ -52,7 +52,7 @@ function Login({ onSwitch }: { onSwitch: () => void }) {
       <form onSubmit={submit}>
         {error && <div className="error-box">{error}</div>}
         <Field label="Email"><input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></Field>
-        <Field label="Password"><input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required /></Field>
+        <Field label="Password"><PasswordInput autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required /></Field>
         <Button type="submit" loading={busy} className="btn-block">Sign in</Button>
       </form>
       <p className="auth-switch">New to MedFinder? <button onClick={onSwitch}>Register your pharmacy</button></p>
@@ -153,8 +153,8 @@ function Register({ onSwitch }: { onSwitch: () => void }) {
         )}
         {step === 2 && (
           <>
-            <Field label="Password" error={errors.password} hint="At least 8 characters"><input type="password" autoComplete="new-password" value={f.password || ''} onChange={set('password')} /></Field>
-            <Field label="Confirm password" error={errors.confirm}><input type="password" autoComplete="new-password" value={f.confirm || ''} onChange={set('confirm')} /></Field>
+            <Field label="Password" error={errors.password} hint="At least 8 characters"><PasswordInput autoComplete="new-password" value={f.password || ''} onChange={set('password')} /></Field>
+            <Field label="Confirm password" error={errors.confirm}><PasswordInput autoComplete="new-password" value={f.confirm || ''} onChange={set('confirm')} /></Field>
             <Field label="Profile picture (optional)" hint="Your logo or a photo of your shopfront, so patients recognise you. You can add it later in your profile.">
               <div className="row">
                 {logo && <img src={URL.createObjectURL(logo)} alt="" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 14, border: '1px solid var(--line)' }} />}

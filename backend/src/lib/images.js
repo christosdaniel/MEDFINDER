@@ -32,20 +32,18 @@ export async function saveImage(file, ownerType, ownerId, { preset = 'product', 
   } catch {
     throw bad("We couldn't read that photo. Try a JPG or PNG (iPhone HEIC photos: share as JPG or take a screenshot).");
   }
-  const id = Number(db.prepare('INSERT INTO images (owner_type, owner_id, mime, data, width, height) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(ownerType, ownerId, 'image/jpeg', out.data, out.info.width, out.info.height).lastInsertRowid);
-  if (oldId) deleteImage(oldId);
+  const id = Number((await db.get('INSERT INTO images (owner_type, owner_id, mime, data, width, height) VALUES (?, ?, ?, ?, ?, ?) RETURNING id', ownerType, ownerId, 'image/jpeg', out.data, out.info.width, out.info.height)).id);
+  if (oldId) await deleteImage(oldId);
   return id;
 }
 
 /** Store a copy of an existing image under another owner (e.g. catalogue default photo). */
-export function copyImage(imageId, ownerType, ownerId) {
-  const img = db.prepare('SELECT mime, data, width, height FROM images WHERE id = ?').get(imageId);
+export async function copyImage(imageId, ownerType, ownerId) {
+  const img = (await db.get('SELECT mime, data, width, height FROM images WHERE id = ?', imageId));
   if (!img) return null;
-  return Number(db.prepare('INSERT INTO images (owner_type, owner_id, mime, data, width, height) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(ownerType, ownerId, img.mime, img.data, img.width, img.height).lastInsertRowid);
+  return Number((await db.get('INSERT INTO images (owner_type, owner_id, mime, data, width, height) VALUES (?, ?, ?, ?, ?, ?) RETURNING id', ownerType, ownerId, img.mime, img.data, img.width, img.height)).id);
 }
 
-export function deleteImage(id) {
-  if (id) db.prepare('DELETE FROM images WHERE id = ?').run(id);
+export async function deleteImage(id) {
+  if (id) await db.run('DELETE FROM images WHERE id = ?', id);
 }

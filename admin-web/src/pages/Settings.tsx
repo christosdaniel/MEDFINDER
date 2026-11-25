@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Button, Field, Spinner, fmtDate, timeAgo, useLoad, useToast } from '@medfinder/web-shared';
+import { Button, Field, Spinner, fmtDate, timeAgo, useLoad, useToast, PasswordInput } from '@medfinder/web-shared';
 import { api } from '../api';
 
 export default function Settings() {
@@ -39,7 +39,7 @@ function Admins() {
       <div className="grid-3">
         <Field label="Name"><input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
         <Field label="Email"><input value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} /></Field>
-        <Field label="Temporary password"><input type="password" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} /></Field>
+        <Field label="Temporary password"><PasswordInput value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} /></Field>
       </div>
       <div><Button variant="secondary" onClick={add} disabled={!f.name || !f.email || f.password.length < 8}>Add admin</Button></div>
     </div>
@@ -54,8 +54,8 @@ function Password() {
   return (
     <div className="card stack">
       <h3>Change your password</h3>
-      <Field label="Current password"><input type="password" value={cur} onChange={(e) => setCur(e.target.value)} /></Field>
-      <Field label="New password" hint="At least 8 characters"><input type="password" value={nw} onChange={(e) => setNw(e.target.value)} /></Field>
+      <Field label="Current password"><PasswordInput value={cur} onChange={(e) => setCur(e.target.value)} /></Field>
+      <Field label="New password" hint="At least 8 characters"><PasswordInput value={nw} onChange={(e) => setNw(e.target.value)} /></Field>
       <div><Button variant="secondary" onClick={save} disabled={!cur || nw.length < 8}>Update password</Button></div>
     </div>
   );

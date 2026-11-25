@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View, type TextInputProps, type ViewStyle, type StyleProp } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -30,13 +30,20 @@ const btn = {
   danger: { box: { backgroundColor: colors.redBg }, text: { color: colors.red } },
 };
 
-export function Input({ label, error, hint, icon, ...props }: TextInputProps & { label?: string; error?: string; hint?: string; icon?: IconName }) {
+export function Input({ label, error, hint, icon, secureTextEntry, ...props }: TextInputProps & { label?: string; error?: string; hint?: string; icon?: IconName }) {
+  // Password fields get an eye button to show/hide what was typed.
+  const [visible, setVisible] = useState(false);
   return (
     <View style={{ gap: 6 }}>
       {label && <Text style={s.label}>{label}</Text>}
       <View style={[s.inputWrap, !!error && { borderColor: colors.red }]}>
         {icon && <Ionicons name={icon} size={18} color={colors.muted} />}
-        <TextInput placeholderTextColor="#94a39b" style={s.input} {...props} />
+        <TextInput placeholderTextColor="#94a39b" style={s.input} secureTextEntry={secureTextEntry && !visible} autoCapitalize={secureTextEntry ? 'none' : props.autoCapitalize} autoCorrect={secureTextEntry ? false : props.autoCorrect} {...props} />
+        {secureTextEntry && (
+          <Pressable onPress={() => setVisible((v) => !v)} hitSlop={10} accessibilityRole="button" accessibilityLabel={visible ? 'Hide password' : 'Show password'}>
+            <Ionicons name={visible ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.muted} />
+          </Pressable>
+        )}
       </View>
       {error ? <Text style={[s.hint, { color: colors.red }]}>{error}</Text> : hint ? <Text style={s.hint}>{hint}</Text> : null}
     </View>

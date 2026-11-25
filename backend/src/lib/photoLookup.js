@@ -23,7 +23,7 @@ let fetchImpl = (...a) => fetch(...a);
 /** Tests replace the network with a fake. */
 export function setFetch(fn) { fetchImpl = fn; }
 
-const flagOn = () => !!db.prepare(`SELECT enabled FROM feature_flags WHERE key = 'auto_medicine_photos'`).get()?.enabled;
+const flagOn = async () => !!(await db.get(`SELECT enabled FROM feature_flags WHERE key = 'auto_medicine_photos'`))?.enabled;
 
 // ---------- talking to Commons, politely ----------
 let lastCall = 0;
@@ -145,17 +145,18 @@ export async function importPhoto({ thumbUrl, sourceUrl, author, license }, owne
   if (!LICENSE_OK.test(license || '')) throw bad('That photo’s licence does not allow reuse');
   const buffer = await politeGet(thumbUrl, { json: false });
   const id = await saveImage({ buffer }, ownerType, ownerId, { preset: 'product', oldId });
-  db.prepare('UPDATE images SET source_url = ?, author = ?, license = ?, auto = 1 WHERE id = ?')
-    .run(String(sourceUrl || '').slice(0, 500), String(author || 'Unknown').slice(0, 120), String(license).slice(0, 60), id);
+  (await db.run('UPDATE images SET source_url = ?, author = ?, license = ?, auto = 1 WHERE id = ?', String(sourceUrl || '').slice(0, 500), String(author || 'Unknown').slice(0, 120), String(license).slice(0, 60), id));
   return id;
 }
 
 /** Credit line for a picture that came from Wikimedia (null for pharmacy-uploaded photos). */
-export function imageCredit(imageId) {
+export async function imageCredit(imageId) {
   if (!imageId) return null;
-  const r = db.prepare('SELECT author, license, source_url FROM images WHERE id = ? AND auto = 1').get(imageId);
-  return r ? { text: `Photo: ${r.author}, ${r.license}, via Wikimedia Commons`, sourceUrl: r.source_url } : null;
+  const r = await db.get('SELECT author, license, source_url FROM images WHERE id = ? AND auto = 1', imageId);
+  return r ? { text: creditText(r.author, r.license), sourceUrl: r.source_url } : null;
 }
+/** Same, from columns already selected (author, license) — avoids an extra query per row. */
+export const creditText = (author, license) => (license ? `Photo: ${author || 'Unknown'}, ${license}, via Wikimedia Commons` : null);
 
 // ---------- background worker ----------
 const queue = new Set();
@@ -163,13 +164,12 @@ let running = false;
 export const lookupStatus = { queued: 0, done: 0, found: 0, lastError: null, running: false };
 
 /** Queue medicines (ids) that have no picture for an automatic lookup. */
-export function enqueuePhotoLookup(ids, { force = false } = {}) {
-  if (!flagOn() || process.env.PHOTO_LOOKUP === 'off') return 0;
+export async function enqueuePhotoLookup(ids, { force = false } = {}) {
+  if (process.env.PHOTO_LOOKUP === 'off' || !ids?.length || !(await flagOn())) return 0;
+  const rows = await db.all(`SELECT id FROM medicines WHERE id = ANY(?::int[]) AND image_id IS NULL
+    AND (? OR photo_checked_at IS NULL OR photo_checked_at < now() - interval '${RECHECK_DAYS} days')`, [...new Set(ids)], force);
   let n = 0;
-  for (const id of ids) {
-    const m = db.prepare('SELECT image_id, photo_checked_at FROM medicines WHERE id = ?').get(id);
-    if (!m || m.image_id) continue;
-    if (!force && m.photo_checked_at && Date.parse(m.photo_checked_at + 'Z') > Date.now() - RECHECK_DAYS * 86400000) continue;
+  for (const { id } of rows) {
     if (!queue.has(id)) { queue.add(id); n++; }
   }
   lookupStatus.queued = queue.size;
@@ -194,15 +194,15 @@ async function runQueue() {
 
 /** Find and attach the best Commons photo for one medicine. Returns true if one was added. */
 export async function autoFill(medicineId) {
-  const med = db.prepare('SELECT * FROM medicines WHERE id = ?').get(medicineId);
+  const med = (await db.get('SELECT * FROM medicines WHERE id = ?', medicineId));
   if (!med || med.image_id) return false;
   const [best] = await suggestPhotos(med, 3);
-  db.prepare(`UPDATE medicines SET photo_checked_at = datetime('now') WHERE id = ?`).run(med.id);
+  (await db.run(`UPDATE medicines SET photo_checked_at = now() WHERE id = ?`, med.id));
   if (!best || best.score < AUTO_MIN_SCORE) return false;
   const imageId = await importPhoto(best, 'medicine', med.id);
   // Only attach if nobody uploaded a picture in the meantime.
-  const out = db.prepare('UPDATE medicines SET image_id = ? WHERE id = ? AND image_id IS NULL').run(imageId, med.id);
-  if (!out.changes) { db.prepare('DELETE FROM images WHERE id = ?').run(imageId); return false; }
+  const out = (await db.run('UPDATE medicines SET image_id = ? WHERE id = ? AND image_id IS NULL', imageId, med.id));
+  if (!out.rowCount) { await db.run('DELETE FROM images WHERE id = ?', imageId); return false; }
   lookupStatus.found++;
   return true;
 }

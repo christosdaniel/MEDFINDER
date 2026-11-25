@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Badge, Button, Field, PhotoPicker, fmtDate, imageUrl, useToast } from '@medfinder/web-shared';
+import { Badge, Button, Field, PhotoPicker, fmtDate, imageUrl, useToast, PasswordInput } from '@medfinder/web-shared';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import LocationPicker from '../components/LocationPicker';
@@ -95,8 +95,8 @@ function ChangePassword() {
     <div className="card">
       <h3>Change password</h3>
       <div className="grid-3 mt" style={{ alignItems: 'end' }}>
-        <Field label="Current password"><input type="password" value={cur} onChange={(e) => setCur(e.target.value)} /></Field>
-        <Field label="New password" hint="At least 8 characters"><input type="password" value={nw} onChange={(e) => setNw(e.target.value)} /></Field>
+        <Field label="Current password"><PasswordInput value={cur} onChange={(e) => setCur(e.target.value)} /></Field>
+        <Field label="New password" hint="At least 8 characters"><PasswordInput value={nw} onChange={(e) => setNw(e.target.value)} /></Field>
         <Button variant="secondary" onClick={save} loading={busy} disabled={!cur || nw.length < 8}>Update password</Button>
       </div>
     </div>

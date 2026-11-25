@@ -13,7 +13,10 @@ export const config = {
   isProd,
   port: Number(process.env.PORT || 4000),
   jwtSecret: process.env.JWT_SECRET || 'dev-only-change-me',
-  dbPath: process.env.DB_PATH || path.join(root, 'data', 'medfinder.db'),
+  // Supabase / Postgres connection string. When empty, an embedded Postgres (PGlite) is used.
+  databaseUrl: process.env.DATABASE_URL || '',
+  // Where PGlite keeps its data locally; 'memory://' for a throwaway database (tests).
+  pgliteDir: process.env.PGLITE_DIR || path.join(root, 'data', 'pglite'),
   // Comma separated list; "*" allows any origin (fine for local development).
   corsOrigins: (process.env.CORS_ORIGINS || '*').split(',').map((s) => s.trim()),
   // In development the OTP is returned in the API response so you can test without SMS.

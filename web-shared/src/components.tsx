@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState, type InputHTMLAttributes, type ReactNode } from 'react';
 import './styles.css';
 
 const PATHS: Record<string, ReactNode> = {
@@ -27,6 +27,8 @@ const PATHS: Record<string, ReactNode> = {
   download: (<><path d="M12 4v12M7 11l5 5 5-5" /><path d="M4 16v4h16v-4" /></>),
   link: (<><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" /></>),
   settings: (<><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" /></>),
+  eye: (<><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></>),
+  eyeOff: (<><path d="M3 3l18 18" /><path d="M10.6 5.1A10.6 10.6 0 0 1 12 5c6.4 0 10 7 10 7a17.6 17.6 0 0 1-3.2 4.2M6.6 6.6C3.8 8.4 2 12 2 12s3.6 7 10 7c1.8 0 3.4-.5 4.8-1.3" /><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" /></>),
   logout: (<><path d="M15 4h4v16h-4" /><path d="M10 17l-5-5 5-5M5 12h11" /></>),
   shield: (<><path d="M12 3 4 6v6c0 5 3.4 8.5 8 9 4.6-.5 8-4 8-9V6Z" /><path d="m9 12 2 2 4-4" /></>),
   flag: (<><path d="M5 21V4" /><path d="M5 4h12l-2 4 2 4H5" /></>),
@@ -333,6 +335,21 @@ export function PhotoSuggestions({ load, onPick }: { load: () => Promise<{ sugge
           {error && <div className="error-box">{error}</div>}
         </>
       )}
+    </div>
+  );
+}
+
+/** Password box with a show/hide button. Accepts the same props as <input>. */
+export function PasswordInput(props: InputHTMLAttributes<HTMLInputElement>) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <div style={{ position: 'relative' }}>
+      <input {...props} type={visible ? 'text' : 'password'} style={{ ...(props.style || {}), paddingRight: 44 }} />
+      <button type="button" className="icon-btn" onClick={() => setVisible((v) => !v)}
+        aria-label={visible ? 'Hide password' : 'Show password'} title={visible ? 'Hide password' : 'Show password'}
+        style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)' }}>
+        <Icon name={visible ? 'eyeOff' : 'eye'} size={18} />
+      </button>
     </div>
   );
 }

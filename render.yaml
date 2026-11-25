@@ -21,13 +21,15 @@ services:
         sync: false            # you type this in the Render dashboard
       - key: CORS_ORIGINS
         value: https://christosdaniel.github.io
-      # Demo settings. Turn these off once you have real users:
-      # SEED_DEMO loads demo pharmacies/medicines if the database is empty.
-      # EXPOSE_DEV_OTP shows the sign-up code in the app until an SMS provider is connected.
+      # Supabase Postgres connection string (Session pooler, port 5432). All data
+      # lives in Supabase, so nothing is lost when Render restarts the server.
+      # Supabase → Project Settings → Database → Connect → Session pooler.
+      - key: DATABASE_URL
+        sync: false            # you paste this in the Render dashboard
+      # No demo data in production.
       - key: SEED_DEMO
-        value: "true"
+        value: "false"
+      # Shows the sign-up code in the app until an SMS provider is connected
+      # (see backend/src/lib/sms.js). Set to "false" once SMS works.
       - key: EXPOSE_DEV_OTP
         value: "true"
-# Note: the free plan has no persistent disk, so the SQLite database is reset
-# when the service restarts or redeploys. For real use, upgrade the service and
-# add a disk (mount path /var/data) and set DB_PATH=/var/data/medfinder.db.
